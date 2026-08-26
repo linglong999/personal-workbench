@@ -1,16 +1,16 @@
 """Task 2-8 真实验收脚本（Step1-5）：真实 Vault 索引 + 真实 LLM。
 
 边界（按用户确认）：
-- VAULT_PATH 直接用真实玲珑de知识库；测试决策写入其真实「决策备忘」目录，
+- VAULT_PATH 从 .env 读取；测试决策写入其真实「决策备忘」目录，
   用「验收测试」前缀便于识别，验收后如需可手动清理。
-- 知识卡片/（79 张）只读索引，用于 RAG；Chroma 用独立目录（.data/chroma-verify）。
+- 知识卡片/ 只读索引（目录 = VAULT_PATH/知识卡片），用于 RAG；
+  Chroma 用独立目录（.data/chroma-verify）。
 """
 import asyncio
 import os
 from pathlib import Path
-import tempfile
 
-os.chdir(r"d:\HuaweiMoveData\Users\曹玲珑\Desktop\个人工作台\workbench")
+os.chdir(Path(__file__).resolve().parents[1])
 
 from workbench.config import load_config
 from workbench.ai.llm import LLMClient
@@ -19,7 +19,8 @@ from workbench.ai.agents import ClassifierAgent, ReviewerAgent, CoachAgent
 from workbench.knowledge.vector import VectorStore
 from workbench.mcp_server import create_server
 
-REAL_CARD_DIR = Path(r"D:\HuaweiMoveData\Users\曹玲珑\Documents\Obsidian Vault\玲珑de知识库\知识卡片")
+cfg = load_config()
+REAL_CARD_DIR = Path(cfg.vault_path) / "知识卡片"
 
 
 def index_real_cards(vector: VectorStore) -> int:
