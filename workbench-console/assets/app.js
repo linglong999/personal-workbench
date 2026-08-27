@@ -4,6 +4,75 @@
   var $ = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
 
+  /* ───────── MOCK / LIVE 运行模式 ─────────
+     MOCK：内置假数据（离线可演示，默认）
+     LIVE：fetch 本地 Bridge（127.0.0.1:8213）真实调用 workbench 的 5 个 MCP 工具 */
+  var API_BASE = "http://127.0.0.1:8213/api";
+  var MODE_KEY = "wb-mode";
+  var MODE = "mock";
+  try { MODE = localStorage.getItem(MODE_KEY) || "mock"; } catch (e) { /* 隐私模式无 localStorage */ }
+  var bridgeWarned = false;
+
+  function api(path, body) {
+    return fetch(API_BASE + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function bridgeDown() {
+    if (bridgeWarned) return;
+    bridgeWarned = true;
+    toast("⚠ 连不上 Bridge —— 请在 workbench/ 目录启动：<span class='mono'>uvicorn workbench.bridge:app --port 8213</span>");
+    setTimeout(function () { bridgeWarned = false; }, 8000);
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  /* classify_text 的真实标签（输入/决策/实践/复盘/创造）→ 归位建议 */
+  function ruleFor(label) {
+    var map = {
+      "输入": "归入收件箱", "决策": "进入决策备忘", "实践": "放入项目 · 行动",
+      "复盘": "生成今日复盘", "创造": "沉淀为知识卡片"
+    };
+    return map[label] || "归入收件箱";
+  }
+
+  var modeChip = $("#modeChip");
+  function applyMode() {
+    if (!modeChip) return;
+    modeChip.textContent = MODE === "live" ? "LIVE" : "MOCK";
+    modeChip.classList.toggle("is-live", MODE === "live");
+    var liveSearch = $("#liveSearch"), searchEmpty = $("#searchEmpty");
+    if (liveSearch && searchEmpty) {
+      liveSearch.hidden = MODE !== "live";
+      searchEmpty.hidden = MODE === "live";
+    }
+  }
+  if (modeChip) {
+    modeChip.addEventListener("click", function () {
+      MODE = MODE === "live" ? "mock" : "live";
+      try { localStorage.setItem(MODE_KEY, MODE); } catch (e) {}
+      applyMode();
+      toast(MODE === "live"
+        ? "已切换到 LIVE · 真实调用本地 Bridge (:8213)"
+        : "已切换到 MOCK · 使用内置演示数据");
+      if (MODE === "live") {
+        var active = $(".nav-item.is-active");
+        if (active) {
+          if (active.dataset.view === "today") liveToday();
+          else if (active.dataset.view === "projects") liveProjects();
+        }
+      }
+    });
+  }
+  applyMode();
+
   /* ───────── 收件箱数据（假数据）───────── */
   var inboxData = [
     { kind: "想法", cls: "kind-idea", txt: "把「确认型 Agent」写成一篇对外讲的简洁说明", conf: "高置信度 · 已就位" },
@@ -49,26 +118,88 @@
   function showView(name) {
     navItems.forEach(function (n) { n.classList.toggle("is-active", n.dataset.view === name); });
     views.forEach(function (v) { v.hidden = (v.id !== "view-" + name); });
+    if (MODE === "live") {
+      if (name === "today") liveToday();
+      else if (name === "projects") liveProjects();
+    }
   }
   navItems.forEach(function (n) {
     n.addEventListener("click", function () { showView(n.dataset.view); });
   });
 
+  /* ───────── LIVE 接线：经验回流（reopen_task）─────────
+     切到「今天」视图时，用第一条任务真实召回历史经验，回填洞察卡。 */
+  function liveToday() {
+    var t = $("#view-today .task b");
+    if (!t) return;
+    api("/reopen_task", { task: t.textContent, top_k: 3 }).then(function (d) {
+      var rs = d.results || [];
+      var p = $("#view-today .ai-insight p");
+      if (!p) return;
+      if (!rs.length) {
+        p.textContent = "知识库里还没有与该任务相关的历史经验 —— 做完这单，它会替你记下来。";
+        return;
+      }
+      p.innerHTML = "与「" + esc(t.textContent) + "」最相关的过往经验（真实检索）：<b>" +
+        rs.map(function (r) { return esc(r.title || r.id || ""); }).join(" · ") + "</b>";
+    }).catch(bridgeDown);
+  }
+
+  /* ───────── LIVE 接线：决策闭环（scan_decision_closed_loop）─────────
+     切到「项目」视图时，真实扫描决策备忘，回填闭环提示卡。 */
+  function liveProjects() {
+    api("/scan_decision_closed_loop").then(function (d) {
+      var miss = d.missing || [];
+      var p = $("#view-projects .ai-insight p");
+      if (!p) return;
+      if (!miss.length) {
+        p.textContent = "真实扫描：决策闭环完整，所有决策均已关联问题 ✓";
+        return;
+      }
+      p.innerHTML = "<b>真实扫描</b>：" + miss.map(esc).join("；") + " —— 建议补关联形成闭环。";
+    }).catch(bridgeDown);
+  }
+
   /* ───────── 全局输入：AI 识别提示（隐形式 AI 的关键演示）───────── */
   var capture = $("#capture");
   var captureHint = $("#captureHint");
+  var debounceTimer;
+  function mockRule(v) {
+    if (/(复盘|总结|回顾)/.test(v)) { return { type: "复盘", rule: "生成今日复盘" }; }
+    if (/(任务|做完|搞定|安排)/.test(v)) { return { type: "任务", rule: "放入项目 · 行动" }; }
+    if (/(决策|决定|要不要|该不该)/.test(v)) { return { type: "决策", rule: "进入决策备忘" }; }
+    return { type: "想法", rule: "归入收件箱" };
+  }
+  function showHint(type, rule, live) {
+    captureHint.hidden = false;
+    captureHint.innerHTML =
+      '<b>✦ AI 识别为「' + type + '」' + (live ? ' <span class="mono" style="font-size:.75em;opacity:.75">· 真实 LLM</span>' : "") + '</b> · 建议' + rule +
+      ' <button class="btn btn-mini" style="margin-left:8px">确认归位</button> <span style="opacity:.7">· 可改</span>';
+  }
   capture.addEventListener("input", function () {
     var v = capture.value.trim();
     if (!v) { captureHint.hidden = true; return; }
-    var type, rule;
-    if (/(复盘|总结|回顾)/.test(v)) { type = "复盘"; rule = "生成今日复盘"; }
-    else if (/(任务|做完|搞定|安排)/.test(v)) { type = "任务"; rule = "放入项目 · 行动"; }
-    else if (/(决策|决定|要不要|该不该)/.test(v)) { type = "决策"; rule = "进入决策备忘"; }
-    else { type = "想法"; rule = "归入收件箱"; }
+    if (MODE !== "live") {
+      var m = mockRule(v);
+      showHint(m.type, m.rule, false);
+      return;
+    }
+    /* LIVE：防抖后走 Bridge 真实分类（classify_text） */
     captureHint.hidden = false;
-    captureHint.innerHTML =
-      '<b>✦ AI 识别为「' + type + '」</b> · 建议' + rule +
-      ' <button class="btn btn-mini" style="margin-left:8px">确认归位</button> <span style="opacity:.7">· 可改</span>';
+    captureHint.innerHTML = "<b>✦ AI 识别中…</b>";
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () {
+      api("/classify_text", { text: v }).then(function (d) {
+        var label = (d.label || "").trim();
+        var m = mockRule(v);
+        if (label) { showHint(label, ruleFor(label), true); }
+        else { showHint(m.type, m.rule, false); }
+      }).catch(function () {
+        var m = mockRule(v);
+        showHint(m.type, m.rule, false);
+        bridgeDown();
+      });
+    }, 600);
   });
   capture.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && capture.value.trim()) {
@@ -135,6 +266,17 @@
     c.addEventListener("click", function () {
       closeCmd();
       var cmd = c.dataset.cmd;
+      /* LIVE：决策检查走真实扫描（scan_decision_closed_loop） */
+      if (cmd === "decision" && MODE === "live") {
+        toast("决策检查中…（真实扫描决策备忘）");
+        api("/scan_decision_closed_loop").then(function (d) {
+          var miss = d.missing || [];
+          toast(miss.length
+            ? "决策检查（真实）：发现 " + miss.length + " 条缺关联 —— 已列入待确认"
+            : "决策检查（真实）：闭环完整 ✓");
+        }).catch(bridgeDown);
+        return;
+      }
       var map = {
         review:        "已生成今日复盘草稿 [撤销]",
         archive:       "已归档 1 条输入 [撤销]",
@@ -180,6 +322,34 @@
     watchAdd.addEventListener("click", function () {
       toast("粘贴链接，AI 会把它归入「稍后再看」 [撤销]");
     });
+  }
+
+  /* ───────── LIVE 接线：知识检索（search_knowledge）─────────
+     检索视图在 LIVE 模式下可用：真实向量检索知识库并渲染结果。 */
+  var srInput = $("#srInput"), srBtn = $("#srBtn"), srResults = $("#srResults");
+  function runSearch() {
+    var q = srInput.value.trim();
+    if (!q) return;
+    srResults.innerHTML = '<p class="sr-note">检索中…</p>';
+    api("/search_knowledge", { query: q, top_k: 5 }).then(function (d) {
+      var rs = d.results || [];
+      if (!rs.length) {
+        srResults.innerHTML = '<p class="sr-note">没有命中 —— 换个问法试试。</p>';
+        return;
+      }
+      srResults.innerHTML = rs.map(function (r, i) {
+        return '<article class="sr-item"><span class="sr-rank">' + (i + 1) + '</span><div>' +
+          "<h3>" + esc(r.title || "未命名") + "</h3>" +
+          "<p>" + esc((r.content || "").slice(0, 160)) + "</p></div></article>";
+      }).join("");
+    }).catch(function () {
+      srResults.innerHTML = '<p class="sr-note">检索失败：Bridge 未启动。</p>';
+      bridgeDown();
+    });
+  }
+  if (srBtn) { srBtn.addEventListener("click", runSearch); }
+  if (srInput) {
+    srInput.addEventListener("keydown", function (e) { if (e.key === "Enter") runSearch(); });
   }
 
 })();

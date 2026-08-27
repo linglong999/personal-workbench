@@ -55,6 +55,7 @@
       <input type="text" id="capture" class="capture-input"
              placeholder="接住想法 / 任务 / 问题 —— 随手记，剩下的交给工作台"
              aria-label="快速输入">
+      <button id="modeChip" class="mode-chip" title="切换 MOCK / LIVE（LIVE 连接本地 Bridge :8213，需先启动 uvicorn workbench.bridge:app）">MOCK</button>
       <span class="capture-hint mono">Ctrl/⌘+K</span>
       <div class="ai-hint" id="captureHint" hidden></div>
     </div>
@@ -179,7 +180,20 @@
 
       <!-- ────── 标签 / 检索 / 设置（占位） ────── -->
       <section class="view" id="view-tags" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">#</span><h2>标签</h2><p>按主题浏览你的知识网络。</p></div></section>
-      <section class="view" id="view-search" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">⌕</span><h2>检索</h2><p>用自然语言问你的知识库。</p></div></section>
+      <section class="view" id="view-search" hidden>
+        <div class="empty" id="searchEmpty"><span class="empty-ico" aria-hidden="true">⌕</span><h2>检索</h2><p>用自然语言问你的知识库。（LIVE 模式下可用真实向量检索）</p></div>
+        <div class="live-search" id="liveSearch" hidden>
+          <header class="view-head">
+            <h1>检索</h1>
+            <p class="view-sub">用自然语言问你的知识库 · 真实向量检索（LIVE）。</p>
+          </header>
+          <div class="sr-bar">
+            <input type="text" id="srInput" class="sr-input" placeholder="例如：RAG 幻觉怎么处理？" aria-label="检索知识库">
+            <button class="btn" id="srBtn">检索</button>
+          </div>
+          <div class="sr-results" id="srResults"></div>
+        </div>
+      </section>
       <section class="view" id="view-settings" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">⚙</span><h2>设置</h2><p>工作区 / 模型 / 白名单目录。</p></div></section>
 
     </div>
