@@ -1,10 +1,32 @@
+# ── 密钥 / 隐私 ─────────────
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Python 缓存 / 虚拟环境 ──
 __pycache__/
-*.pyc
-.data/
-temp_*/
-.pytest_cache/
+*.py[cod]
 .venv/
+venv/
 *.egg-info/
 build/
 dist/
+
+# ── 数据 / 测试缓存 ────────
+.data/
+temp_*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── 编辑器 / 系统 ──────────
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── 浏览器/工具产物 ─────────
+.trae-*

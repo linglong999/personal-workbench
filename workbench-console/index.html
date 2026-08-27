@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人工作台 · Console</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- 常驻折叠窄条：sidebar 收起后，用它展开 -->
+  <div class="side-rail" id="sideRail" hidden>
+    <button class="rail-btn" id="railExpand" title="展开侧栏 (Ctrl/⌘+B)" aria-label="展开侧栏">☰</button>
+  </div>
+
+  <!-- ══════════ 左侧导航 ══════════ -->
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <button class="icon-btn" id="sideToggle" title="收起 / 展开侧栏 (Ctrl/⌘+B)" aria-label="收起或展开侧栏" aria-pressed="false">☰</button>
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span class="brand-name">个人工作台</span>
+      <button class="icon-btn" id="cmdK" title="命令面板 (Ctrl/⌘+K)" aria-label="打开命令面板">⌘</button>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-view="inbox"><span class="nav-ico">☖</span>收件箱 <span class="nav-badge" id="inboxCount">3</span></button>
+      <button class="nav-item" data-view="today"><span class="nav-ico">◉</span>今天</button>
+      <button class="nav-item" data-view="projects"><span class="nav-ico">▤</span>项目 / 行动</button>
+      <button class="nav-item" data-view="review"><span class="nav-ico">↻</span>复盘</button>
+      <button class="nav-item" data-view="knowledge"><span class="nav-ico">❖</span>知识</button>
+
+      <div class="nav-sep" aria-hidden="true"></div>
+      <button class="nav-item nav-sub" data-view="tags"><span class="nav-ico">#</span>标签</button>
+      <button class="nav-item nav-sub" data-view="search"><span class="nav-ico">⌕</span>检索</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="nav-item nav-sub" data-view="settings"><span class="nav-ico">⚙</span>设置</button>
+    </div>
+
+    <button class="ai-queue" id="aiQueue" title="AI 待确认" aria-label="AI 待确认项">
+      <span class="ai-queue-dot" aria-hidden="true"></span>
+      <span>AI 待确认</span>
+      <span class="ai-queue-num">3</span>
+    </button>
+  </aside>
+
+  <!-- ══════════ 中央内容区 ══════════ -->
+  <main class="workspace" role="main">
+
+    <!-- 全局输入条 -->
+    <div class="capture" role="search">
+      <span class="capture-mark" aria-hidden="true">＋</span>
+      <input type="text" id="capture" class="capture-input"
+             placeholder="接住想法 / 任务 / 问题 —— 随手记，剩下的交给工作台"
+             aria-label="快速输入">
+      <span class="capture-hint mono">Ctrl/⌘+K</span>
+      <div class="ai-hint" id="captureHint" hidden></div>
+    </div>
+
+    <!-- 稍后再看 · 流动卡片条带 -->
+    <section class="watch-band" aria-label="稍后再看">
+      <header class="watch-head">
+        <h2>稍后再看</h2>
+        <span class="watch-sub">来自视频 / 文章网站的收藏</span>
+        <button class="icon-btn watch-add" id="watchAdd" title="添加一条" aria-label="添加稍后再看">＋</button>
+      </header>
+      <div class="marquee-wrap">
+        <div class="marquee-track" id="marqueeTrack"></div>
+      </div>
+    </section>
+
+    <!-- 动态视图容器 -->
+    <div class="views" id="views">
+
+      <!-- ────── 收件箱视图 ────── -->
+      <section class="view" id="view-inbox">
+        <header class="view-head">
+          <h1>收件箱</h1>
+          <p class="view-sub">待处理的碎片。AI 已按类型与置信度为你归拢。</p>
+        </header>
+        <ul class="inbox-list" id="inboxList"></ul>
+      </section>
+
+      <!-- ────── 今天视图 ────── -->
+      <section class="view" id="view-today" hidden>
+        <header class="view-head">
+          <h1>今天</h1>
+          <p class="view-sub">今日任务 + 一条来自过往经验的 AI 提示。</p>
+        </header>
+
+        <div class="task-board">
+          <div class="task-col">
+            <h3 class="col-title">待做</h3>
+            <div class="task" data-priority="high"><span class="task-dot" aria-hidden="true"></span><div><b>完成个人工作台 2-8 验收</b><span class="task-meta">项目 · 高优先级</span></div></div>
+            <div class="task" data-priority="med"><span class="task-dot" aria-hidden="true"></span><div><b>整理用户访谈记录</b><span class="task-meta">产品 · 关联知识 2 条</span></div></div>
+            <div class="task" data-priority="med"><span class="task-dot" aria-hidden="true"></span><div><b>起草本周复盘</b><span class="task-meta">复盘 · 待 AI 提炼</span></div></div>
+          </div>
+          <div class="task-col">
+            <h3 class="col-title">已完成</h3>
+            <div class="task is-done"><span class="task-dot" aria-hidden="true"></span><div><s>更新知识卡片 根因分析法</s><span class="task-meta">知识 · 三小时前</span></div></div>
+          </div>
+        </div>
+
+        <div class="ai-insight" role="note">
+          <span class="ai-insight-mark" aria-hidden="true">✦</span>
+          <div>
+            <b>来自过往经验</b>
+            <p>你上次做验收时，把「环境隔离」列为首要风险并提前解决了 —— 这次可以复用这条复盘。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────── 项目/行动视图 ────── -->
+      <section class="view" id="view-projects" hidden>
+        <header class="view-head">
+          <h1>项目 / 行动</h1>
+          <p class="view-sub">每个行动关联到知识，AI 会在决策遗漏时提醒你。</p>
+        </header>
+        <ul class="proj-list">
+          <li class="proj-item"><span class="proj-ico" aria-hidden="true">❖</span><div><b>个人工作台开源项目</b><span class="task-meta">3 个行动 · 2 条决策</span></div><span class="tag tag-blue">进行中</span></li>
+          <li class="proj-item"><span class="proj-ico" aria-hidden="true">❖</span><div><b>AI 素养学习计划</b><span class="task-meta">5 个行动 · 8 篇知识</span></div><span class="tag tag-blue">进行中</span></li>
+          <li class="proj-item"><span class="proj-ico" aria-hidden="true">❖</span><div><b>面试作品集打磨</b><span class="task-meta">1 个行动</span></div><span class="tag tag-amber">待开始</span></li>
+        </ul>
+        <div class="ai-insight" role="note">
+          <span class="ai-insight-mark" aria-hidden="true">✦</span>
+          <div><b>决策闭环提示</b><p>「项目2-8验收」这条决策尚未关联到任何「问题」—— 建议补一条来形成闭环。</p></div>
+        </div>
+      </section>
+
+      <!-- ────── 复盘视图 ────── -->
+      <section class="view" id="view-review" hidden>
+        <header class="view-head">
+          <h1>复盘</h1>
+          <p class="view-sub">AI 在左侧事实、右侧提炼；复盘完成后沉淀为知识。</p>
+        </header>
+        <div class="review-grid">
+          <div class="review-panel">
+            <h3 class="col-title">本周发生过什么</h3>
+            <ul class="fact-list">
+              <li>• 完成 Task 2-8 端到端验收（Mock + 真实 LLM）</li>
+              <li>• README 重写为理念引导版</li>
+              <li>• 决定走「理念 + 示例」开源路线</li>
+            </ul>
+          </div>
+          <div class="review-panel review-ai">
+            <h3 class="col-title"><span class="ai-chip">AI 提炼</span></h3>
+            <ul class="fact-list">
+              <li>• 偏差：决策闭环检查缺一条「问题」关联</li>
+              <li>• 可沉淀：环境隔离预案 → 知识卡片</li>
+              <li>• 下次：验收前先列环境风险清单</li>
+            </ul>
+            <button class="btn btn-ghost" id="reviewToKnowledge">沉淀为知识卡片</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────── 知识视图 ────── -->
+      <section class="view" id="view-knowledge" hidden>
+        <header class="view-head">
+          <h1>知识</h1>
+          <p class="view-sub">你的第二大脑。AI 自动打标签与关联。</p>
+        </header>
+        <div class="library">
+          <article class="kb-card kb-main">
+            <span class="kb-type">知识卡片</span>
+            <h2>根因分析法（RCA）</h2>
+            <p class="kb-desc">面对故障与偏差，先问「为什么」五次，不要急着归因于人。</p>
+            <div class="kb-tags"><span class="tag tag-blue">方法论</span><span class="tag tag-soft">调试</span><span class="tag tag-soft">复盘</span></div>
+          </article>
+          <div class="kb-grid">
+            <article class="kb-card"><span class="kb-type">知识卡片</span><h3>Prompt 六要素</h3><p class="kb-desc">角色 · 上下文 · 任务 · 格式 · 示例 · 边界。</p></article>
+            <article class="kb-card"><span class="kb-type">知识卡片</span><h3>确认型 Agent</h3><p class="kb-desc">高置信度自主收，低置信度才升级到人。</p></article>
+            <article class="kb-card kb-new"><span class="kb-type">知识卡片 · 新</span><h3>环境隔离预案</h3><p class="kb-desc">刚由复盘沉淀而来，AI 已打标签并关联到「验收」项目。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ────── 标签 / 检索 / 设置（占位） ────── -->
+      <section class="view" id="view-tags" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">#</span><h2>标签</h2><p>按主题浏览你的知识网络。</p></div></section>
+      <section class="view" id="view-search" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">⌕</span><h2>检索</h2><p>用自然语言问你的知识库。</p></div></section>
+      <section class="view" id="view-settings" hidden><div class="empty"><span class="empty-ico" aria-hidden="true">⚙</span><h2>设置</h2><p>工作区 / 模型 / 白名单目录。</p></div></section>
+
+    </div>
+
+    <!-- 右下角 toast -->
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <!-- ══════════ 右侧上下文面板 ══════════ -->
+  <aside class="context" aria-label="上下文面板">
+    <div class="ctx-block">
+      <h4 class="ctx-title">环境式 AI</h4>
+      <p class="ctx-note">AI 在后台为你做这些，你无需逐一确认。</p>
+      <ul class="ctx-ops">
+        <li><span class="ctx-t">已归档 2 条</span><span class="tag tag-soft">自动</span></li>
+        <li><span class="ctx-t">已打标签 3 条</span><span class="tag tag-soft">自动</span></li>
+        <li><span class="ctx-t">关联到「验收」项目</span><span class="tag tag-soft">自动</span></li>
+      </ul>
+    </div>
+    <div class="ctx-block">
+      <h4 class="ctx-title">相关笔记</h4>
+      <p class="ctx-note">与当前查看内容最相关。</p>
+      <ul class="ctx-links">
+        <li>↳ 根因分析法（RCA）</li>
+        <li>↳ 确认型 Agent 设计</li>
+      </ul>
+    </div>
+    <div class="ctx-block">
+      <h4 class="ctx-title">AI 助手</h4>
+      <p class="ctx-note">可主动提问，但日常流程不依赖它。</p>
+      <textarea class="ctx-ask" rows="2" placeholder="在任何页面按 ⌘K 也能提问…" aria-label="向 AI 提问"></textarea>
+    </div>
+  </aside>
+</div>
+
+<!-- 命令面板 -->
+<div class="cmd-modal" id="cmdModal" hidden role="dialog" aria-modal="true" aria-label="命令面板">
+  <div class="cmd-box">
+    <input type="text" class="cmd-input" id="cmdInput" placeholder="输入命令，如 /复盘 /归档 /决策检查" aria-label="命令">
+    <ul class="cmd-list" id="cmdList">
+      <li data-cmd="review">/ 生成今日复盘</li>
+      <li data-cmd="archive">/ 归档输入</li>
+      <li data-cmd="decision">/ 检查决策闭环</li>
+      <li data-cmd="tag">/ 自动打标签</li>
+      <li data-cmd="knowledge">/ 沉淀为知识卡片</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 待确认弹层 -->
+<div class="confirm-toast" id="confirmBox" hidden role="dialog" aria-modal="true" aria-label="AI 待确认">
+  <div class="confirm-inner">
+    <div class="confirm-head"><span class="ai-chip">AI 待确认 · 3</span><button class="icon-btn" id="confirmClose" aria-label="关闭">×</button></div>
+    <ul class="confirm-list">
+      <li><span>将「整理访谈记录」归类到 产品?</span><button class="btn btn-mini">确认</button></li>
+      <li><span>从复盘提炼「环境隔离预案」卡片?</span><button class="btn btn-mini">确认</button></li>
+      <li><span>补一条问题关联到「2-8验收」决策?</span><button class="btn btn-mini">确认</button></li>
+    </ul>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

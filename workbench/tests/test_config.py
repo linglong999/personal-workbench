@@ -11,9 +11,7 @@ def test_load_config_with_env(monkeypatch, tmp_path):
     assert cfg.llm_model
 
 
-def test_load_config_missing_vault(tmp_path):
-    import os
-    for k in ("VAULT_PATH",):
-        os.environ.pop(k, None)
+def test_load_config_missing_vault(monkeypatch):
+    monkeypatch.delenv("VAULT_PATH", raising=False)
     with pytest.raises(ConfigError):
-        load_config()
+        load_config(use_dotenv=False)

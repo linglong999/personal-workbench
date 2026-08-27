@@ -32,6 +32,7 @@ class Config:
         )
 
 
-def load_config() -> Config:
-    load_dotenv()
+def load_config(use_dotenv: bool = True) -> Config:
+    if use_dotenv:
+        load_dotenv()
     return Config.from_env()

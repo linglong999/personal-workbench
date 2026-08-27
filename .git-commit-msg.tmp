@@ -1,0 +1,6 @@
+docs(opensource): 仓库上移至根目录 + 开源门面就绪
+
+- 收敛阶段一(六层提示词/方法论/检查表/数据集)至仓库根，纳入版本管理
+- README 补前端 Console 原型说明 + 阶段一产物索引 + 路标
+- 新增 LICENSE(MIT)，根目录统一 .gitignore
+- workbench 后端保留原提交历史(重命名识别)，.env/.data 已排除
