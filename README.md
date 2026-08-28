@@ -1,4 +1,4 @@
-# workbench · 个人工作台 MCP 服务
+# 个人工作台 · workbench
 
 > 一句话北极星：**把文本贴上去，它自己接住；并把你的经验与知识，变成下次可复用的有价值的东西。**
 
@@ -19,6 +19,8 @@ python -m pip install -e ".[dev]"
 
 # 2. 跑内置 Mock 端到端验证（用假 LLM，免 key，验证 5 个工具 + 价值循环能跑通）
 python scripts/e2e_mock.py
+
+# 3. 看界面：双击 workbench-console/index.html（MOCK 模式离线预览；LIVE 接真实后端见下「前端页面」）
 ```
 
 看到脚本输出"价值循环跑通"即可。然后配置真实 LLM 与你的 Vault，把循环填进你自己的数据——见下方「配置」。
@@ -52,24 +54,30 @@ python scripts/e2e_mock.py
 
 ---
 
-## 前端页面 · Console（原型）
+## 前端页面 · Console（MOCK / LIVE 双模式）
 
 `workbench-console/` 是这套工作台的**可视界面**——一个"AI 隐形"的产品控制台：左侧抽屉式侧栏（☰ 或 Ctrl/⌘+B 折叠）、顶部一句话接住输入、收件箱/今天/项目/复盘/知识分区、右下 AI 轻提示。
 
 - 它刻意让 AI **不抢戏**：分类、检索、复盘提炼都织进流程角落（气泡、右侧相关笔记、命令面板），而不是一堆"AI 按钮"——对应「隐形式 AI」的产品定位。
 - 当前的「稍后再看」是流动卡片条带。
-- **当前为纯前端原型**（`index.html` + `assets/`，双击即可打开预览），**尚未接真实后端**。与后端 MCP 服务的接线属于后续迭代（Bridge 层），见「路标」。
+- **双模式运行**：默认 **MOCK**（纯前端假数据，双击 `index.html` 即可离线预览）；点击输入条右侧 **MOCK/LIVE 开关**切到 **LIVE**，前端经本地 HTTP Bridge（:8213）真实调用后端的 5 个工具——输入条实时分类（真实 LLM）、「今天」经验回流、「项目」决策闭环扫描、「检索」视图向量查询。Bridge 掉线时自动回落并提示启动命令，不影响离线演示。
 
 ```bash
+# 终端 1：启动 HTTP Bridge（LIVE 模式必需，cwd=workbench）
+python -m uvicorn workbench.bridge:app --port 8213
+
+# 终端 2：启动 Console（任意静态服务器均可）
 cd workbench-console
-python -m http.server 8212      # 然后浏览器打开 http://127.0.0.1:8212
+python -m http.server 8212      # 浏览器打开 http://127.0.0.1:8212，点输入条右侧 MOCK 切 LIVE
 ```
+
+> Bridge 端点与 5 个 MCP 工具一一对应（`/api/search_knowledge`、`/api/create_note`、`/api/classify_text`、`/api/scan_decision_closed_loop`、`/api/reopen_task`），业务逻辑完全复用同一套组件，不改后端本身。
 
 ---
 
 ## 技术栈
 
-Python 3.10+、FastMCP、ChromaDB、Pydantic、pytest、python-dotenv、openai 兼容客户端。
+Python 3.10+、FastMCP、FastAPI（Bridge 层）、ChromaDB、Pydantic、pytest、python-dotenv、openai 兼容客户端。
 
 ## 结构
 
@@ -85,6 +93,7 @@ workbench/
 │   │   ├── engine.py      # AI 引擎（分类/闭环检查）
 │   │   └── agents.py      # ClassifierAgent / ReviewerAgent / CoachAgent
 │   ├── mcp_server.py      # FastMCP 工具注册（5 个工具）
+│   ├── bridge.py          # HTTP Bridge：5 个工具暴露给前端 Console（LIVE 模式）
 │   └── main.py            # 入口与集成
 └── tests/                 # pytest（TDD）
 ```
@@ -112,6 +121,7 @@ pip install -e ".[dev]"
 pytest -v                  # 全量测试（11 个）
 python scripts/e2e_mock.py # 免 key 端到端验证
 python -m workbench.main   # 启动 MCP 服务器（stdio）
+python -m uvicorn workbench.bridge:app --port 8213   # 启动 HTTP Bridge（前端 LIVE 模式）
 ```
 
 ## 工具
@@ -129,6 +139,8 @@ python -m workbench.main   # 启动 MCP 服务器（stdio）
 - **Chroma 默认 embedding**：上游默认识别 ONNX 模型，首次运行需下载（网络受限时不适用）。本仓库以**本地哈希 embedding 作默认**，即装即测、无需下载；如需更强语义检索，可自行替换 embedding 函数。
 - **`classify_text` / `scan_decision_closed_loop` / `reopen_task`** 是真 Agent 能力，依赖**真实 LLM + 你的真实 Vault** 才有意义——这正是本项目的设计初衷：价值在你的数据 + 你的 AI 上发生。
 - **对外输出（多平台适配）**：`PublisherAgent` 为后续迭代（实施计划 M11），不在当前范围。
+- **Bridge 为本地单用户设计**：监听 127.0.0.1、CORS 全放行（便于前端联调），**请勿暴露到公网**；如需多人使用请自行收紧来源与鉴权。
+- **Obsidian 直开需真实浏览器**：Console 的检索结果 / 标签卡片点击会通过 `obsidian://` URI 唤起 Obsidian 打开原笔记。嵌入式预览浏览器（IDE 内置 webview）会静默拦截外部协议——请用 Chrome/Edge 打开 `http://127.0.0.1:8212`，首次点击时浏览器会请求确认"打开 Obsidian"。
 
 ---
 
@@ -158,7 +170,7 @@ python -m workbench.main   # 启动 MCP 服务器（stdio）
 |---|---|---|
 | 阶段一 | Vault 工作流 + 六层 Prompt 工程 | ✅ 完成（本仓库） |
 | 阶段二 | Python MCP 服务（5 工具，TDD 11 测试全绿） | ✅ 完成 |
-| 阶段二 + | **前端 Console 接真实后端**（MCP→HTTP Bridge 层） | ⏳ 下一步 |
+| 阶段二 + | **前端 Console 接真实后端**（MCP→HTTP Bridge 层 + MOCK/LIVE 开关） | ✅ 完成 |
 | 阶段三 | 开源对外打磨（示例模板、演示） + 上传 | 🔶 准备中 |
 
 ---
