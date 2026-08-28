@@ -118,7 +118,7 @@ pip install -e ".[dev]"
 ## 运行
 
 ```bash
-pytest -v                  # 全量测试（11 个）
+pytest -v                  # 全量测试（13 个）
 python scripts/e2e_mock.py # 免 key 端到端验证
 python -m workbench.main   # 启动 MCP 服务器（stdio）
 python -m uvicorn workbench.bridge:app --port 8213   # 启动 HTTP Bridge（前端 LIVE 模式）
@@ -169,9 +169,9 @@ python -m uvicorn workbench.bridge:app --port 8213   # 启动 HTTP Bridge（前�
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 阶段一 | Vault 工作流 + 六层 Prompt 工程 | ✅ 完成（本仓库） |
-| 阶段二 | Python MCP 服务（5 工具，TDD 11 测试全绿） | ✅ 完成 |
+| 阶段二 | Python MCP 服务（5 工具，TDD 13 测试全绿） | ✅ 完成 |
 | 阶段二 + | **前端 Console 接真实后端**（MCP→HTTP Bridge 层 + MOCK/LIVE 开关） | ✅ 完成 |
-| 阶段三 | 开源对外打磨（示例模板、演示） + 上传 | 🔶 准备中 |
+| 阶段三 | 开源对外打磨（示例模板、演示） + 上传 | 🔶 已上传 GitHub · 对外打磨中 |
 
 ---
 
