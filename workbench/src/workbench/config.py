@@ -16,6 +16,8 @@ class Config:
     llm_model: str
     chroma_dir: str = ".data/chroma"
     embed_model: str = "default"
+    llm_price_in_per_m: float = 1.0
+    llm_price_out_per_m: float = 2.0
 
     @classmethod
     def from_env(cls, env=None):
@@ -29,6 +31,8 @@ class Config:
             llm_api_key=env.get("LLM_API_KEY", ""),
             llm_model=env.get("LLM_MODEL", "gpt-4o-mini"),
             chroma_dir=env.get("CHROMA_DIR", ".data/chroma"),
+            llm_price_in_per_m=float(env.get("LLM_PRICE_IN_PER_M", "1.0")),
+            llm_price_out_per_m=float(env.get("LLM_PRICE_OUT_PER_M", "2.0")),
         )
 
 

@@ -21,8 +21,9 @@ def create_server(ctx) -> FastMCP:
 
     @mcp.tool()
     def create_note(folder: str, title: str, content: str) -> str:
-        """在指定目录创建笔记。"""
+        """在指定目录创建笔记（写入后同步向量索引，立即可检索）。"""
         path = vault.create_note(folder, title, content)
+        vector.add(f"note-{path.stem}", title, content, path=str(path))
         return str(path)
 
     @mcp.tool()

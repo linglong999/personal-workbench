@@ -56,9 +56,10 @@ class VectorStore:
             name="knowledge", embedding_function=self.ef
         )
 
-    def add(self, doc_id: str, title: str, content: str):
+    def add(self, doc_id: str, title: str, content: str, path: str = ""):
         text = f"{title}\n{content}"
-        self.collection.upsert(ids=[doc_id], documents=[text], metadatas=[{"title": title}])
+        self.collection.upsert(ids=[doc_id], documents=[text],
+                               metadatas=[{"title": title, "path": path}])
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         res = self.collection.query(query_texts=[query], n_results=top_k)
@@ -66,4 +67,5 @@ class VectorStore:
         ids = res.get("ids", [[]])[0] or []
         metas = res.get("metadatas", [[]])[0] or []
         metas = metas or [{}] * len(ids)
-        return [{"id": i, "title": m.get("title", ""), "content": d} for i, d, m in zip(ids, docs, metas)]
+        return [{"id": i, "title": m.get("title", ""), "content": d, "path": m.get("path", "")}
+                for i, d, m in zip(ids, docs, metas)]
