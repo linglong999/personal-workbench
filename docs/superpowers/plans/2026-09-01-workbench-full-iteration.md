@@ -545,6 +545,16 @@ git add workbench/src/workbench/auth workbench/tests/test_auth.py workbench/test
 git commit -m "feat(auth): M0-B1 SQLite 用户存储 + JWT 登录注册 + Bridge 鉴权"
 ```
 
+> **B1 执行记录（2026-09-02，全部 26 测试绿，coverage 78.5% ≥ 70%）：**
+> 1. **修正 Step 6 设计缺陷**：`require_auth` 原计划用模块常量 `_AUTH_SECRET` 解码 token，但测试 monkeypatch `auth_service`（独立 secret）后签发/校验 secret 不一致，`/api/auth/me` 必 401。改为 `AuthService.verify_token()`（secret 单源，bridge 只调不持有），monkeypatch 后全链路一致。
+> 2. **修正 repository 连接泄漏**：`with conn:` 只管事务不管关闭 → `closing(conn) + conn` 组合。
+> 3. `repo: UserRepository = field(init=False)` 标注，过 mypy（17 文件无错）。
+> 4. 鉴权端点实为 **7 个**（计划写 5 个）：search_knowledge / list_tags / usage(GET) / create_note / classify_text / scan_decision_closed_loop / reopen_task，按封板范围界定全部挂 `Depends(require_auth)`；`/api/health`、`/api/auth/*` 放行。
+> 5. `observe_calls` 采纳计划注建议：skip 列表加 `/api/auth/`（auth 非业务调用，不记 usage 观测）。
+> 6. 测试增强（7→13 用例）：verify_token 回环/伪造、短密码、health 放行、错密码登录 401、重复注册 400。
+> 7. `fail_under` 按分阶段约定提至 70（实测 78.5%）；JWT fallback secret 加长至 ≥32 字节（避 InsecureKeyLengthWarning）。
+> 8. **Review 修复（2026-09-02，提交前复查发现）**：① `test_auth.py` 4 处 11 字节短 secret → `b"t" * 32`（与 test_bridge 统一，InsecureKeyLengthWarning 4 处全消，19→15 个警告，余下 15 个均为 Chroma 三方库 DeprecationWarning，B0 前既有）；② `bridge.py` `_AUTH_SECRET` 补短 key 边界——LLM key 非空但 <32B 时（如 CI 的 `sk-test`）拼接 fallback 补足。修后复验：26 测试绿、coverage 78.61%、ruff 27 文件过、mypy 17 文件无错。
+
 ### M0-B2 · 前端 React 化（Vite + React 脚手架 + 视图迁移）
 
 **背景**：`workbench-console` 现为纯静态（`index.html` + `assets/app.js` \~26KB + `app.css`）。B2 将其迁为 Vite+React 工程，**功能等价迁移**（不丢能力），新增功能留给 M0-B3/B4。

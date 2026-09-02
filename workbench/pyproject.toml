@@ -10,6 +10,8 @@ dependencies = [
     "openai>=1.0",
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    "PyJWT>=2.8",
+    "bcrypt>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +60,6 @@ source = ["src/workbench"]
 omit = ["src/workbench/__main__.py"]
 
 [tool.coverage.report]
-# 分阶段收紧：B0 过渡阈值 50%（bridge/usage 尚无测试，属结构性事实）；
-# B1 补 bridge/auth 测试后提到 70%；M0 收口（B4/B5 后）达到最终目标 85%。
-fail_under = 50
+# 分阶段收紧：B0=50%（已过，实测52.8%）→ B1=70%（已过，实测78.5%）；
+# M0 收口（B4/B5 后）达到最终目标 85%。
+fail_under = 70

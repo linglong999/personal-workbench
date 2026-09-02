@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.3.0] - 2026-09-02
+
+### Added（M0-B1 · 后端认证）
+
+- `workbench/auth/` 模块：`UserRepository`（SQLite 用户表，`closing` + 事务组合防连接泄漏）与
+  `AuthService`（bcrypt 哈希 + JWT 签发/校验，secret 单源、可被测试替换）
+- `bridge.py` 新增 `/api/auth/register|login|me` 三端点；7 个业务端点统一挂
+  `Depends(require_auth)`（missing/invalid token → 401）；`/api/health` 与 `/api/auth/*` 放行
+- `observe_calls` skip 列表加 `/api/auth/`（auth 非业务调用，不计 usage 观测）
+- 测试 13 → 26 个（`test_auth.py` 7 + `test_bridge.py` 6），coverage 78.6%（门槛按分阶段约定 70%）
+- 依赖：PyJWT >= 2.8、bcrypt >= 4.0
+
+### Fixed（M0-B1 review）
+
+- `test_auth.py` 短 secret（11B）触发 4 处 InsecureKeyLengthWarning → 统一 `b"t" * 32`
+- `_AUTH_SECRET` 短 key 边界：LLM key 非空但 <32B 时（如 CI 的 `sk-test`）拼接 fallback 补足，
+  避免短 HMAC key 警告
+
 ## [0.2.0] - 2026-09-02
 
 ### Added（M0-B0 · 工程规范）
