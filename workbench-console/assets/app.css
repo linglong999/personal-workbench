@@ -573,3 +573,53 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
 }
 .auth-demo:hover { background: var(--acc-soft); }
 .auth-hint { margin-top: 12px; font-size: 0.76rem; color: var(--muted); text-align: center; }
+
+/* ═══════════ Widget 容器（M0-B5）═══════════
+   外壳 .widget 在格子内自适应；头部 + 内容区。
+   健康灯真实数据；占位 widget 纯结构。 */
+.widget {
+  height: 100%; display: flex; flex-direction: column; gap: 4px;
+  position: relative; /* kb-grip 绝对定位锚点 */
+}
+.widget-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 2px 6px; border-bottom: 1px solid var(--rule);
+}
+.widget-title { font-weight: 600; font-size: 0.85rem; }
+.widget-refresh {
+  width: 22px; height: 22px; border-radius: var(--r-sm); color: var(--muted);
+  display: grid; place-items: center; font-size: 0.95rem;
+}
+.widget-refresh:hover { background: var(--bg-hover); color: var(--ink); }
+.widget-body { flex: 1; overflow: auto; }
+
+/* 服务健康灯（HealthWidget）*/
+.hw-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem;
+}
+.hw-st { margin-left: auto; font-size: 0.8rem; font-weight: 600; }
+.hw-st-ok { color: var(--ok); }
+.hw-st-down { color: var(--err); }
+.hw-st-checking { color: var(--muted); }
+.hl-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: 0 0 0 3px oklch(50% 0.02 60 / 0.1);
+}
+.hl-ok { background: var(--ok); animation: hl-pulse 2.5s ease-in-out infinite; }
+.hl-down { background: var(--err); }
+.hl-checking { background: var(--muted); }
+@keyframes hl-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.hw-meta { font-size: 0.74rem; color: var(--muted); line-height: 1.7; }
+.hw-meta.mono { font-size: 0.72rem; }
+
+/* 占位 widget（PlaceholderWidget）*/
+.phw { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+.phw-badge {
+  display: inline-block; width: fit-content; padding: 1px 7px; border-radius: 99px;
+  background: var(--acc-soft); color: var(--acc-deep);
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em;
+}
+.phw p { font-size: 0.82rem; color: var(--ink-2); }
+.phw-sub { font-size: 0.72rem !important; color: var(--muted); }
+/* widget 化的格子内卡片：继承 kb-card 的可拖拽/缩放特性 */
+.grid-shell .widget { background: var(--bg-raise); border: 1px solid var(--rule); border-radius: var(--r-md); padding: 12px; overflow: auto; }

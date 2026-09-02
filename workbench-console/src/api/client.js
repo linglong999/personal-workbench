@@ -5,7 +5,9 @@
 
 import { getToken, logout } from '../auth/auth.js'
 
-const BASE = 'http://127.0.0.1:8213/api'
+/* Bridge 免鉴权端点（如 /api/health）直连用；业务请求走下方 request()（带 token） */
+export const BRIDGE_ORIGIN = 'http://127.0.0.1:8213'
+const BASE = BRIDGE_ORIGIN + '/api'
 const MODE_KEY = 'wb-mode'
 
 async function request(path, { method = 'POST', body } = {}) {

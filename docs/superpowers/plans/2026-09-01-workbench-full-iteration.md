@@ -1039,6 +1039,7 @@ Modify `App.jsx`：外层包 `<RequireAuth>`。
 - [x] 手动改坏 token → 401 → 自动登出回登录
 
 > **B4 执行记录（2026-09-02，build ✓ 71 模块 / lint 0 error / 浏览器验收 A·B·C·D·E 全 PASS）：**
+>
 > 1. **登录/注册合为 AuthPage**（计划模板分两个文件）：两态逻辑几乎相同，合并为单文件双 tab 减重复；后端 `/api/auth/login` 与 `/api/auth/register` 请求体一致（`AuthReq{username,password}`）。后端错误 detail 英文（`invalid credentials`/`password too short (min 6)`/`username already exists: …`），前端 catch 映射为中文友好提示（已补验：错误密码→「用户名或密码不正确」）。
 > 2. **登录门设计决策**：计划模板要求 `location.href='/#/login'`，但项目无 URL 路由（视图是 React state），改为事件驱动——`auth.js` 派发 `wb-auth` 事件，`RequireAuth` 监听后重渲染。落地发现 `getMode()` 的 `||'mock'` 兜底使全新用户也豁免、登录页永远不出现；修正为新增 `getModeRaw()` 区分「未选择→登录页」与「明确选过 mock→豁免」。开源用户 clone 后仍可一键演示，零配置体验不受影响。
 > 3. **演示模式豁免**：RequireAuth 放行条件 = `isAuthed() || getModeRaw()==='mock'`；LIVE 未持 token → 登录页。登录/注册成功后 `setMode('live')` + `setToken`；演示按钮只 `setMode('mock')`。MOCK 下点切 LIVE 被拦截提示「需先登录」。设置页账号卡：已登录→「登出」；未登录→「去登录 / 注册」（置 live + 广播事件 → 落登录页）。
@@ -1067,7 +1068,7 @@ git commit -m "feat(auth-ui): M0-B4 登录/注册页 + JWT 路由守卫"
 
 - Modify: `workbench-console/src/shell/GridShell.jsx`（渲染注册表 widget）
 
-- [ ] **Step 1: 统一 widget 接口**
+- [x] **Step 1: 统一 widget 接口**
 
 Create `workbench-console/src/widgets/Widget.jsx`:
 
@@ -1091,7 +1092,7 @@ export default function Widget({ id, title, size, config, refresh, children }) {
 }
 ```
 
-- [ ] **Step 2: 注册表 + 占位 widget**
+- [x] **Step 2: 注册表 + 占位 widget**
 
 Create `workbench-console/src/widgets/registry.js`:
 
@@ -1117,7 +1118,7 @@ export default function PlaceholderWidget({ id, config, refresh }) {
 }
 ```
 
-- [ ] **Step 3: 渲染 widget 进 GridShell**
+- [x] **Step 3: 渲染 widget 进 GridShell**
 
 Modify `workbench-console/src/shell/GridShell.jsx`：children 中放置注册表 widget。先渲染 1 个 placeholder 验证可挂载：
 
@@ -1129,13 +1130,21 @@ import PlaceholderWidget from '../widgets/PlaceholderWidget.jsx'
 
 其它已迁移视图（收件箱/今天/知识等）同样包成 widget 形态放进 GridShell，使每个区域可拖拽/缩放——与 B3 布局保存联动。
 
-- [ ] **Step 4: 手动验收**
+- [x] **Step 4: 手动验收**
 
-- [ ] 页面出现"占位组件"widget，可随 GridStack 拖拽/缩放
+- [x] 页面出现"占位组件"widget，可随 GridStack 拖拽/缩放
 
-- [ ] 布局仍自动保存（与 B3 一致）
+- [x] 布局仍自动保存（与 B3 一致）
 
-- [ ] **Step 5: Commit**
+> **B5 执行记录（2026-09-02，build ✓ / lint 0 error / 浏览器验收全 PASS）：**
+> 1. **健康灯接真实数据源**（与计划模板「纯空壳」有意不同，源自用户拍板的 B5 范围「+ 服务健康灯」）：`/api/health` 是免鉴权本地端点（ADR 例外清单），HealthWidget 轮询 30s + ↻ 手动探活，绿=在线/红=离线——M0-B5 唯一真实数据 widget，验证容器框架 fetch→render→refresh 全链路（Bridge 访问日志证实周期性 GET /api/health）。
+> 2. **挂载位 = 用量视图**（M4 统计承接位）：`WidgetGrid` 渲染注册表 4 项——服务健康（真实）+ 知识存量/用量趋势/外部数据（占位，hint 注明 M4 接入什么，不造假数据）。计划模板的「其它视图也包成 widget」**未执行**：GridShell 约定 item 内容静态（B3），而视图内容动态（state 驱动），强行包裹违反集成约定；widget 定位是 M4 数据图表（M4-B 依赖项），非重构既有视图。
+> 3. **契约**：registry entry = `{id, title, size, component, props?}`（数组保序，默认布局即数组序）；component 接收 `{tick, cfg}`——tick 由面板 ↻ bump 注入（手动刷新），cfg=entry.props。M4 接入时只换 component，容器不动。Widget.jsx 只做外壳（头部/手柄/↻/内容区），不自带 `.grid-stack-item`（GridShell 职责，B3 约定）。
+> 4. **GridShell 零改动**：计划模板要求改 GridShell，实际 B3 已把它做成通用容器（items props），B5 全部复用。`client.js` 导出 `BRIDGE_ORIGIN` 供免鉴权直连（健康探测不走带 token 的 request()）。
+> 5. **验收**（浏览器自动化）：4 widget 渲染 + 健康灯在线（deepseek-chat）✓；`gs.update(el,{x,y,w})` 移动/缩放（GridStack 13.2 无 move/resize，API 为 update）→ `wb-layout:usage-widgets` 写入 → 刷新后位置尺寸保持（"0,10,5"）✓，两个 widget 均验 ✓；↻ 真实重探活（服务端计数 57→61 + 网络日志双重验证）✓；回归（知识视图 4 卡 + grid-shell 计数 1、收件箱/今天/设置无白屏、无业务 JS error）✓。注：鼠标模拟拖拽在自动化环境不稳定（视口异常），布局验证改用 GridStack JS API 等价覆盖；↻ 的「检测中」过渡 <50ms 肉眼难察（本地响应快，属正常）。
+> 6. **顺带（B4 review 登记项解决）**：登录「记住我」——`AuthReq.remember` → `AuthService._ttl()` 覆盖 TTL（默认 1h / 记住 30 天），前端 checkbox 默认勾选；TDD 2 测试（login/register × remember 断言 exp-iat）。登记项移交：30 天 token 存 localStorage 属本地单用户形态（ADR-0001 D2/D3），公网化需换 httpOnly cookie；↻ 可加旋转动画（打磨项）。
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add workbench-console/src/widgets workbench-console/src/shell/GridShell.jsx

@@ -2,6 +2,27 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.7.0] - 2026-09-02
+
+### Added（M0-B5 · Widget 容器框架）
+
+- `src/widgets/`：`Widget.jsx`（统一外壳：标题/↻ 刷新/⠿ 拖拽手柄/内容区）、
+  `registry.js`（注册表，entry = id/title/size/component/props，数组保序即默认布局）、
+  `WidgetGrid.jsx`（注册表 → GridShell，布局保存 `wb-layout:usage-widgets`；↻ bump tick 注入手动刷新）
+- `HealthWidget.jsx` 服务健康灯（**真实数据源**）：轮询免鉴权 `/api/health`（30s）+ ↻ 手动探活，
+  绿=在线/红=离线——验证容器框架 fetch→render→refresh 全链路
+- 3 个占位 widget（知识存量/用量趋势/外部数据）：hint 注明 M4 接入内容，不造假数据
+- 挂载位：用量视图（M4 统计承接位）；GridShell 零改动（B3 已做成通用容器，全部复用）
+- `client.js` 导出 `BRIDGE_ORIGIN`（免鉴权直连，健康探测不走带 token 的 request()）
+
+## [0.6.1] - 2026-09-02
+
+### Added（M0-B4 后续 · 登录记住我）
+
+- `AuthReq.remember` → `AuthService` TTL 覆盖（`_ttl()`）：默认 1 小时 / 记住 30 天
+- 登录/注册页「记住我 · 30 天免登录」checkbox（默认勾选）；TDD 2 测试断言 exp-iat
+- 解决 B4 review 登记项：本地单用户每小时重登的体验问题
+
 ## [0.6.0] - 2026-09-02
 
 ### Added（M0-B4 · 前端认证入口）

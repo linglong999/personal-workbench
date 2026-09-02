@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiGet } from '../api/client.js'
 import { bridgeDown, esc } from '../utils.js'
+import WidgetGrid from '../widgets/WidgetGrid.jsx'
 
 function fmtCost(c) {
   if (!c) return '¥0'
@@ -52,6 +53,10 @@ export default function UsageView({ mode, toast }) {
         <h1>用量</h1>
         <p className="view-sub">每次调用、token 消耗与成本估算 —— 评测与迭代的数据底座（LIVE）。</p>
       </header>
+
+      {/* M0-B5 widget 容器：M4 在此接入知识存量/用量趋势等真实数据源 */}
+      <WidgetGrid />
+
       <div className="usage-summary">
         {mode === 'live' && data && (
           <>
