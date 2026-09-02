@@ -1382,19 +1382,42 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 > 2. **测试修正一处**（非实现 bug）：review 等价测试初版照抄 test_ai 的「孤决策 in 消息」断言，但 test_ai 用的是硬编码 fake（返回「决策备忘/孤决策 缺少关联问题」）；真实 `read_all_notes` 返回笔记**内容**，消息为「{内容} 缺少关联问题」。等价断言本身一次通过。此发现顺带揭示：engine.check_closed_loop 的消息以内容为标识，可读性差——登记为 M3 决策深化时顺手改（消息带文件名）。
 > 3. **架构对齐**：skills 落位 `ai/skills/`（ADR-0001 D1 模块图 ai 含 Skill，单向依赖 knowledge）；`SkillResult.confidence` 默认 1.0，为 B2 decision 低置信、B3 主管判 interrupt 预留。
 
+### M1-B2 · 2 新 Skill（decision/action）（逐任务 TDD）
+
+> **范围界定（B2 落 Skill 侧契约，interrupt 发射归 B3 主管）**：`requires_confirmation` 标志 + 未确认零副作用 + 确认后写入是 B2 可测的全部；主管读标志/置信度发射 confirm/disambiguate/judgement interrupt 是 B3 的接线。
+> 「次日跟进信号」落法：待办正文含「次日跟进」节（时间/触发条件），不另立文件夹。
+
+- [x] **Step 1（红）**：`tests/test_skills.py` 扩写 + `tests/test_ai.py` 补引擎边界测试——
+  1. 注册表扩到 5（decision/action 入表）；协议标志：action `requires_confirmation=True`，其余 4 个 False
+  2. decision：高置信 happy（options/lean/clarify 透传，needs_judgement=False）；低置信 → needs_judgement=True（拍板标记）；confidence 非法值按 0.0 处理（LLM 边界防御）
+  3. action：未确认 run **零副作用且幂等**（重复调用不写库，status=needs_confirmation 且带预览）；确认后写决策备忘（正文含「关联问题」——review 闭环契约）与待办（正文含「次日跟进」）
+  4. engine 新方法 `analyze_decision`/`draft_note`（决策层/实践层 prompt）：FakeLLM 测 JSON 边界（合法/非法 JSON/非 dict 三态回退）
+- [x] **Step 2（绿）**：`engine.py` 补两方法（prompt 按六层文档的决策层/实践层措辞，JSON 解析+回退）；`ai/skills/decision.py`、`ai/skills/action.py`；registry 扩 5
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+- [x] **Step 4**：review（用户批内指令）+ CHANGELOG + commit
+
+> **B2 执行记录（2026-09-02，64 test / coverage 89.11%（engine、skills 包均 100%）/ ruff、mypy 干净）：**
+> 1. **TDD 红**：12 failed（registry 5 项 + decision 3 + action 3 + engine 5 方法缺失）→ 绿。
+> 2. **review 抓到两个真 bug（均已修 + 补测试）**：
+>    - **「待办」撞 Vault 白名单**：`VaultStore.ALLOWED_FOLDERS` 不含「待办」，确认写入必 ValueError——初版测试用 RecordingVault 假仓库测不出来（fake 太松）。修复：action 显式 `KIND_FOLDERS` 映射（待办→行动记录，六层框架实践层目录）+ 未知 kind 入口即拒（不论确认与否）；测试改用**真 VaultStore**（tmp_path 落盘），白名单契约进入测试防线。
+>    - **合法 JSON 字段残缺 → KeyError**：LLM 返回 `{"confidence": 0.9}` 这类残缺结构时 `analysis["options"]`/`draft["title"]` 直接崩。修复：engine 改 defaults 合并（`{**defaults, **data}`），已有字段透传、残缺字段兜底；补 2 个 shape-miss 测试。LLM 是系统边界，残缺 JSON 是比非法 JSON 更常见的失败模式。
+> 3. **顺手关闭存量覆盖缺口**：`AIEngine.check_closed_loop` 循环体（63-67 行）此前所有测试都用 FakeEngine 绕过、真 engine 这段规则逻辑零直测——补 1 测，engine.py 至 100%。
+> 4. **契约落点**：decision 输出 `needs_judgement`（<0.6）+ clarify（B3 映射 disambiguate/judgement）；action 未确认零副作用（幂等）+ 预览带起草内容（B3 confirm interrupt 直接可展示）；决策备忘正文含「关联问题」（review 闭环契约）、待办正文含「次日跟进」（跟进信号落在正文，不另立文件夹）。
+> 5. **六层 prompt**：decision=决策层（结构化追问+多维分析，confidence 反映信息充分度）；action 起草=实践层（备忘三节「背景/决定/关联问题」、待办两节「下一步/次日跟进」，「不编造用户没给的事实」）。
+
 ### M1 · 成功准则核对
 
 M1 完成标志：
 
 - [ ] ReAct 主管 Orchestrator 存在，状态图（IDLE/INGEST/ACTING/WAITING\_HUMAN/DONE/ERROR）可跑
 
-- [ ] 5 个 Skill（classify/decision/action/review/recall）全部注册进注册表，从注册表按名可取
+- [x] 5 个 Skill（classify/decision/action/review/recall）全部注册进注册表，从注册表按名可取
 
-- [ ] 3 个现有 Agent（Classifier/Reviewer/Coach）行为迁移无回归（单测断言等价）
+- [x] 3 个现有 Agent（Classifier/Reviewer/Coach）行为迁移无回归（单测断言等价）（B1 等价测试）
 
-- [ ] 2 个新 Skill（decision/action）有红转绿测试
+- [x] 2 个新 Skill（decision/action）有红转绿测试
 
-- [ ] action 写 Vault 前触发 confirm interrupt；decision 低置信触发 disambiguate/judgement
+- [ ] action 写 Vault 前触发 confirm interrupt；decision 低置信触发 disambiguate/judgement（B2 已落 Skill 侧契约：标志/零副作用/拍板标记；interrupt 发射归 B3 主管）
 
 - [ ] 每跳产生 domain event，Trace 可回放、坏例可归因
 

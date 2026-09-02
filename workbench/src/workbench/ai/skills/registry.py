@@ -1,15 +1,19 @@
 """Skill 注册表：主管唯一调度入口（主管→注册表→Skill，单向依赖）。
 
-M1-B1 注册 3 个迁移 Skill；M1-B2 补齐 decision/action 成 5。
+M1-B2 补齐 5 个：classify/review/recall（迁移）+ decision/action（新写）。
 """
 
+from workbench.ai.skills.action import ActionSkill
 from workbench.ai.skills.base import Skill
 from workbench.ai.skills.classify import ClassifySkill
+from workbench.ai.skills.decision import DecisionSkill
 from workbench.ai.skills.recall import RecallSkill
 from workbench.ai.skills.review import ReviewSkill
 
 REGISTRY: dict[str, type[Skill]] = {
     "classify": ClassifySkill,
+    "decision": DecisionSkill,
+    "action": ActionSkill,
     "review": ReviewSkill,
     "recall": RecallSkill,
 }

@@ -2,6 +2,25 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.10.0] - 2026-09-02
+
+### Added（M1-B2 · decision/action 两个新 Skill，注册表满 5）
+
+- `ai/skills/decision.py`（决策层）：结构化追问 + 多维分析，产出可选方案与倾向；confidence<0.6 输出 `needs_judgement` 拍板标记（B3 主管映射 disambiguate/judgement）；LLM 非法置信度按 0.0 处理
+- `ai/skills/action.py`（实践层）：结论/待办起草落库，`requires_confirmation=True`；未确认零副作用且幂等（预览带起草内容供 confirm interrupt 展示）；`KIND_FOLDERS` 显式映射（待办→行动记录，Vault 白名单目录）+ 未知 kind 入口即拒
+- `engine.py` 新增 `analyze_decision` / `draft_note`（决策层/实践层 prompt，六层文档措辞）；JSON 边界三态兜底（非法 JSON/非 dict/字段残缺 → defaults 合并，不抛异常）
+- 闭环契约内嵌：决策备忘正文必含「关联问题」（review 扫描依赖）、待办正文必含「次日跟进」（跟进信号落在正文）
+
+### Fixed（review 抓到的两个真 bug）
+
+- 「待办」kind 撞 `VaultStore.ALLOWED_FOLDERS` 白名单（确认写入必 ValueError）——初版假仓库测试测不出，改真 VaultStore 测试后修复
+- LLM 返回合法 JSON 但字段残缺时 `analysis["options"]`/`draft["title"]` KeyError——engine 改 defaults 合并
+
+### 实测
+
+- 64 test 全过（+15），coverage 89.11%（engine.py、skills 包均 100%），ruff / mypy 干净
+- 顺带关闭存量缺口：`AIEngine.check_closed_loop` 此前零直测（全被 FakeEngine 绕过）
+
 ## [0.9.0] - 2026-09-02
 
 ### Added（M1-B1 · Skill 基础设施 + 3 迁移 Skill）
