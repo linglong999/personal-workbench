@@ -11,6 +11,7 @@ export default function AuthPage({ onAuthed }) {
   const [tab, setTab] = useState('login')
   const [name, setName] = useState('')
   const [pass, setPass] = useState('')
+  const [remember, setRemember] = useState(true)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const nameRef = useRef(null)
@@ -40,6 +41,7 @@ export default function AuthPage({ onAuthed }) {
     api('/auth/' + (tab === 'login' ? 'login' : 'register'), {
       username: name.trim(),
       password: pass,
+      remember,
     })
       .then((d) => {
         setToken(d.token)
@@ -109,6 +111,15 @@ export default function AuthPage({ onAuthed }) {
               value={pass}
               onChange={(e) => setPass(e.target.value)}
             />
+          </label>
+
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>记住我 · 30 天免登录（不勾选则 1 小时）</span>
           </label>
 
           {err && (

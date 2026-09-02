@@ -21,6 +21,10 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+# 「记住我」会话 TTL：30 天免登录（默认 1 小时，见 AuthService.ttl_seconds）
+REMEMBER_TTL_SECONDS = 30 * 24 * 3600
+
+
 @dataclass
 class AuthService:
     db_path: str
@@ -31,12 +35,13 @@ class AuthService:
     def __post_init__(self):
         self.repo = UserRepository(self.db_path)
 
-    def _issue(self, username: str) -> str:
+    def _issue(self, username: str, ttl_seconds: int | None = None) -> str:
+        ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
         now = dt.datetime.now(dt.timezone.utc)
         payload = {
             "sub": username,
             "iat": now,
-            "exp": now + dt.timedelta(seconds=self.ttl_seconds),
+            "exp": now + dt.timedelta(seconds=ttl),
             "jti": str(uuid.uuid4()),
         }
         return jwt.encode(payload, self.secret, algorithm="HS256")
@@ -51,11 +56,11 @@ class AuthService:
             raise ValueError("invalid token payload")
         return payload
 
-    def register(self, username: str, password: str) -> str:
+    def register(self, username: str, password: str, remember: bool = False) -> str:
         if len(password) < 6:
             raise ValueError("password too short (min 6)")
         self.repo.create_user(username, hash_password(password))
-        return self._issue(username)
+        return self._issue(username, self._ttl(remember))
 
     def authenticate(self, username: str, password: str) -> User:
         user = self.repo.get_by_username(username)
@@ -63,6 +68,9 @@ class AuthService:
             raise ValueError("invalid credentials")
         return user
 
-    def login(self, username: str, password: str) -> str:
+    def login(self, username: str, password: str, remember: bool = False) -> str:
         self.authenticate(username, password)
-        return self._issue(username)
+        return self._issue(username, self._ttl(remember))
+
+    def _ttl(self, remember: bool) -> int:
+        return REMEMBER_TTL_SECONDS if remember else self.ttl_seconds

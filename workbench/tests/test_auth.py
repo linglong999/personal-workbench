@@ -59,3 +59,19 @@ def test_register_short_password(db):
     svc = AuthService(db, secret=b"t" * 32)
     with pytest.raises(ValueError):
         svc.register("frank", "12345")
+
+
+def test_remember_extends_ttl(db):
+    svc = AuthService(db, secret=b"t" * 32, ttl_seconds=3600)
+    svc.register("grace", "pw12345")
+    short = svc.verify_token(svc.login("grace", "pw12345", remember=False))
+    long = svc.verify_token(svc.login("grace", "pw12345", remember=True))
+    assert short["exp"] - short["iat"] == 3600
+    assert long["exp"] - long["iat"] == 30 * 24 * 3600
+
+
+def test_register_remember_extends_ttl(db):
+    svc = AuthService(db, secret=b"t" * 32, ttl_seconds=3600)
+    token = svc.register("heidi", "pw12345", remember=True)
+    payload = svc.verify_token(token)
+    assert payload["exp"] - payload["iat"] == 30 * 24 * 3600

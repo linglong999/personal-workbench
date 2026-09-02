@@ -545,6 +545,13 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
   border: 1px solid var(--rule); border-radius: var(--r-sm); color: var(--ink);
 }
 .auth-field input:focus { border-color: var(--acc); outline: none; }
+.auth-remember {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  font-size: 0.82rem; color: var(--ink-2); cursor: pointer; user-select: none;
+}
+.auth-remember input {
+  width: 15px; height: 15px; accent-color: var(--acc); cursor: pointer;
+}
 .auth-err {
   font-size: 0.85rem; color: var(--err); background: oklch(96% 0.02 28 / 0.6);
   border-radius: var(--r-sm); padding: 8px 10px; margin-bottom: 14px;

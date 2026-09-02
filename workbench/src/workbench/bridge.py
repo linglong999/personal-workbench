@@ -240,12 +240,13 @@ def api_reopen(req: TaskReq, _: dict = Depends(require_auth)):
 class AuthReq(BaseModel):
     username: str
     password: str
+    remember: bool = False
 
 
 @app.post("/api/auth/register")
 def api_register(req: AuthReq):
     try:
-        token = auth_service.register(req.username, req.password)
+        token = auth_service.register(req.username, req.password, remember=req.remember)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"token": token}
@@ -254,7 +255,7 @@ def api_register(req: AuthReq):
 @app.post("/api/auth/login")
 def api_login(req: AuthReq):
     try:
-        token = auth_service.login(req.username, req.password)
+        token = auth_service.login(req.username, req.password, remember=req.remember)
     except ValueError:
         raise HTTPException(status_code=401, detail="invalid credentials")
     return {"token": token}
