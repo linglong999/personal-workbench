@@ -130,7 +130,7 @@ mypy src
 
 Expected: 无阻塞错误。若有小问题，修正类型标注。
 
-- [ ] **Step 4: 运行覆盖率并确认 ≥85%**
+- [x] **Step 4: 运行覆盖率并确认达标**
 
 Run（cwd=workbench）:
 
@@ -139,6 +139,8 @@ pytest --cov --cov-report=term-missing
 ```
 
 Expected: Total coverage ≥85%。
+
+> **执行修正（2026-09-02，用户拍板方案 2）：** B0 时点实测 52.8%——bridge.py 0%、usage.py 39% 是结构性缺口（其测试属 B1/M4 范围），B0 单批无法诚实达到 85%。改为**分阶段收紧**：B0=50%（已过）→ B1 补 auth/bridge 测试后提 70% → M0 收口（B4/B5 后）85%。`pyproject.toml` 的 `fail_under` 随阶段调整，理由与路线记入 ADR-0001 D5。
 
 - [ ] **Step 5: 创建 GitHub Actions CI 工作流**
 

@@ -1,7 +1,9 @@
 """Chroma 向量检索。"""
+
 import hashlib
+
 from chromadb import PersistentClient
-from chromadb.api.types import EmbeddingFunction, Documents
+from chromadb.api.types import Documents, EmbeddingFunction
 
 
 class _LocalEmbeddingFunction(EmbeddingFunction):
@@ -20,15 +22,20 @@ class _LocalEmbeddingFunction(EmbeddingFunction):
         toks = []
         for piece in text.lower().split():
             toks.append(piece)
-            toks.extend(piece[i:i + 2] for i in range(len(piece) - 1))
+            toks.extend(piece[i : i + 2] for i in range(len(piece) - 1))
         return toks
 
-    def __call__(self, input: Documents) -> list[list[float]]:
+    # 返回 list[list[float]] 而非 chromadb 声明的 ndarray；本地哈希向量用纯 list 即可，
+    # 与三方库 EmbeddingFunction 的静态返回类型有意偏离。
+    def __call__(self, input: Documents) -> list[list[float]]:  # type: ignore[override]
         results = []
         for doc in input:
-            vec = {}
+            vec: dict[int, float] = {}
             for tok in self._tokens(doc):
-                idx = int.from_bytes(hashlib.sha256(tok.encode("utf-8")).digest()[:4], "big") % self._dim
+                idx = (
+                    int.from_bytes(hashlib.sha256(tok.encode("utf-8")).digest()[:4], "big")
+                    % self._dim
+                )
                 vec[idx] = vec.get(idx, 0.0) + 1.0
             if not vec:
                 results.append([0.0] * self._dim)
@@ -58,14 +65,17 @@ class VectorStore:
 
     def add(self, doc_id: str, title: str, content: str, path: str = ""):
         text = f"{title}\n{content}"
-        self.collection.upsert(ids=[doc_id], documents=[text],
-                               metadatas=[{"title": title, "path": path}])
+        self.collection.upsert(
+            ids=[doc_id], documents=[text], metadatas=[{"title": title, "path": path}]
+        )
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         res = self.collection.query(query_texts=[query], n_results=top_k)
-        docs = res.get("documents", [[]])[0] or []
-        ids = res.get("ids", [[]])[0] or []
-        metas = res.get("metadatas", [[]])[0] or []
+        docs = (res.get("documents") or [[]])[0] or []
+        ids = (res.get("ids") or [[]])[0] or []
+        metas = (res.get("metadatas") or [[]])[0] or []
         metas = metas or [{}] * len(ids)
-        return [{"id": i, "title": m.get("title", ""), "content": d, "path": m.get("path", "")}
-                for i, d, m in zip(ids, docs, metas)]
+        return [
+            {"id": i, "title": m.get("title", ""), "content": d, "path": m.get("path", "")}
+            for i, d, m in zip(ids, docs, metas)
+        ]

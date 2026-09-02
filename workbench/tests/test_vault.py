@@ -10,6 +10,7 @@ def test_create_note(tmp_path):
 
 def test_create_note_requires_known_folder(tmp_path):
     import pytest
+
     vault = VaultStore(str(tmp_path))
     with pytest.raises(ValueError):
         vault.create_note("不存在的目录", "x", "y")
@@ -29,9 +30,9 @@ def test_list_tags_returns_title_and_path(tmp_path):
     folder = tmp_path / "知识卡片"
     folder.mkdir()
     (folder / "卡片A.md").write_text(
-        "---\ntitle: 卡片A\ntags:\n  - RAG\n  - Agent\n---\n\n正文", encoding="utf-8")
-    (folder / "卡片B.md").write_text(
-        "---\ntags:\n  - RAG\n---\n\n正文", encoding="utf-8")
+        "---\ntitle: 卡片A\ntags:\n  - RAG\n  - Agent\n---\n\n正文", encoding="utf-8"
+    )
+    (folder / "卡片B.md").write_text("---\ntags:\n  - RAG\n---\n\n正文", encoding="utf-8")
     tags = vault.list_tags()
     assert set(tags.keys()) == {"RAG", "Agent"}
     assert {e["title"] for e in tags["RAG"]} == {"卡片A", "卡片B"}

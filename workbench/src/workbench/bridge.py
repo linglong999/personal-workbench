@@ -10,6 +10,7 @@
 或：
     python -m workbench.bridge
 """
+
 import json
 import os
 import time
@@ -21,16 +22,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from workbench import usage
-from workbench.config import load_config
-from workbench.ai.llm import LLMClient
+from workbench.ai.agents import ClassifierAgent, CoachAgent, ReviewerAgent
 from workbench.ai.engine import AIEngine
-from workbench.ai.agents import ClassifierAgent, ReviewerAgent, CoachAgent
+from workbench.ai.llm import LLMClient
+from workbench.config import load_config
 from workbench.knowledge.vault import VaultStore
 from workbench.knowledge.vector import VectorStore
 
 cfg = load_config()
-llm = LLMClient(cfg.llm_base_url, cfg.llm_api_key, cfg.llm_model,
-                cfg.llm_price_in_per_m, cfg.llm_price_out_per_m)
+llm = LLMClient(
+    cfg.llm_base_url,
+    cfg.llm_api_key,
+    cfg.llm_model,
+    cfg.llm_price_in_per_m,
+    cfg.llm_price_out_per_m,
+)
 engine = AIEngine(llm)
 vector = VectorStore(cfg.chroma_dir)
 vault = VaultStore(cfg.vault_path)
@@ -52,7 +58,7 @@ app.add_middleware(
 async def observe_calls(request: Request, call_next):
     """每次 /api/* 调用都记录：工具名、输入摘要、耗时、本次触发的 LLM token 增量。"""
     path = request.url.path
-    skip = path == "/api/usage"           # 查询用量本身不记录，避免噪音
+    skip = path == "/api/usage"  # 查询用量本身不记录，避免噪音
     body_head = ""
     if path.startswith("/api/") and not skip and request.method == "POST":
         raw = await request.body()
@@ -61,9 +67,14 @@ async def observe_calls(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
     if path.startswith("/api/") and not skip:
-        usage.record_tool(path.replace("/api/", ""), body_head, before,
-                          usage.snapshot(), int((time.time() - start) * 1000),
-                          response.status_code < 400)
+        usage.record_tool(
+            path.replace("/api/", ""),
+            body_head,
+            before,
+            usage.snapshot(),
+            int((time.time() - start) * 1000),
+            response.status_code < 400,
+        )
     return response
 
 
@@ -114,6 +125,7 @@ def _obsidian_uri(abs_path: str) -> str:
 def _registry_path() -> Path:
     """Obsidian 全局注册表 obsidian.json 位置（win / mac / linux）。"""
     import sys
+
     if sys.platform == "win32" and os.environ.get("APPDATA"):
         return Path(os.environ["APPDATA"]) / "obsidian" / "obsidian.json"
     if sys.platform == "darwin":

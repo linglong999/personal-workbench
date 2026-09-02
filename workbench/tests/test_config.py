@@ -1,4 +1,5 @@
 import pytest
+
 from workbench.config import ConfigError, load_config
 
 

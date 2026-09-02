@@ -1,8 +1,9 @@
 """FastMCP 服务器：注册知识库与 AI / Agent 工具。"""
+
 from fastmcp import FastMCP
+
 from workbench.knowledge.vault import VaultStore
 from workbench.knowledge.vector import VectorStore
-from workbench.ai.agents import ClassifierAgent, ReviewerAgent, CoachAgent
 
 
 def create_server(ctx) -> FastMCP:

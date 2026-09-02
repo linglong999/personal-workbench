@@ -1,8 +1,9 @@
 """应用入口：加载配置并构建 MCP 服务器。"""
-from workbench.config import load_config
-from workbench.ai.llm import LLMClient
+
+from workbench.ai.agents import ClassifierAgent, CoachAgent, ReviewerAgent
 from workbench.ai.engine import AIEngine
-from workbench.ai.agents import ClassifierAgent, ReviewerAgent, CoachAgent
+from workbench.ai.llm import LLMClient
+from workbench.config import load_config
 from workbench.knowledge.vector import VectorStore
 from workbench.mcp_server import create_server
 

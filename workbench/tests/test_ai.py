@@ -1,5 +1,5 @@
-from workbench.ai.engine import AIEngine
 from workbench.ai.agents import ClassifierAgent, ReviewerAgent
+from workbench.ai.engine import AIEngine
 
 
 class FakeLLM:
@@ -20,6 +20,7 @@ def test_classifier_agent_uses_engine():
 
 def test_reviewer_agent_finds_unlinked_decisions(monkeypatch, tmp_path):
     from workbench.knowledge.vault import VaultStore
+
     vault = VaultStore(str(tmp_path))
     vault.create_note("决策备忘", "孤决策", "---\ntype: 决策备忘\n---")
 

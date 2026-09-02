@@ -1,4 +1,5 @@
 """Obsidian Vault 文件读写。"""
+
 import re
 from pathlib import Path
 
@@ -16,11 +17,15 @@ class VaultStore:
         folder_path = self.root / folder
         folder_path.mkdir(parents=True, exist_ok=True)
         from datetime import date, datetime
+
         safe = title.replace("/", "-")
         path = folder_path / f"{date.today().isoformat()}-{safe}.md"
         if path.exists():
             # 同日同题不覆盖旧笔记（会丢内容），追加时分秒后缀
-            path = folder_path / f"{date.today().isoformat()}-{safe}-{datetime.now().strftime('%H%M%S')}.md"
+            path = (
+                folder_path
+                / f"{date.today().isoformat()}-{safe}-{datetime.now().strftime('%H%M%S')}.md"
+            )
         path.write_text(content, encoding="utf-8")
         return path
 

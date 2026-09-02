@@ -1,6 +1,8 @@
 """配置管理：从环境变量加载配置。"""
+
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 

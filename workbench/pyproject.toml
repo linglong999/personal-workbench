@@ -13,7 +13,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
 
 [build-system]
 requires = ["setuptools>=64"]
@@ -25,3 +31,33 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+explicit_package_bases = true
+warn_unused_ignores = true
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+ignore_errors = true
+
+[tool.coverage.run]
+source = ["src/workbench"]
+omit = ["src/workbench/__main__.py"]
+
+[tool.coverage.report]
+# 分阶段收紧：B0 过渡阈值 50%（bridge/usage 尚无测试，属结构性事实）；
+# B1 补 bridge/auth 测试后提到 70%；M0 收口（B4/B5 后）达到最终目标 85%。
+fail_under = 50

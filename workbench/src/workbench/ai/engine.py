@@ -6,7 +6,9 @@ class AIEngine:
         self.llm = llm
 
     def classify(self, text: str) -> str:
-        system = "你是分类助手。根据内容判断类型，只输出 '输入'、'决策'、'实践'、'复盘'、'创造' 之一。"
+        system = (
+            "你是分类助手。根据内容判断类型，只输出 '输入'、'决策'、'实践'、'复盘'、'创造' 之一。"
+        )
         return self.llm.complete(system, text)
 
     def check_closed_loop(self, decisions: list[str]) -> list[str]:

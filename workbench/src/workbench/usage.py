@@ -3,13 +3,14 @@
 内存存储（Bridge 单进程生命周期内有效，重启清零），零依赖。
 价格单位：元 / 百万 tokens，从 .env 可配（LLM_PRICE_IN_PER_M / LLM_PRICE_OUT_PER_M）。
 """
+
 import threading
 from datetime import datetime
 
 _lock = threading.Lock()
-_events: list[dict] = []          # 时间线：工具调用 + LLM 调用，按发生顺序
+_events: list[dict] = []  # 时间线：工具调用 + LLM 调用，按发生顺序
 _totals = {"tool_calls": 0, "llm_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
-_prices = {"in_per_m": 1.0, "out_per_m": 2.0}   # 默认按 DeepSeek deepseek-chat 近似价，可 .env 覆盖
+_prices = {"in_per_m": 1.0, "out_per_m": 2.0}  # 默认按 DeepSeek deepseek-chat 近似价，可 .env 覆盖
 MAX_EVENTS = 200
 
 
@@ -26,16 +27,18 @@ def record_llm(model: str, system: str, user: str, prompt_tokens: int, completio
     """LLMClient.complete 每次调用后记录。"""
     cost = _cost(prompt_tokens, completion_tokens)
     with _lock:
-        _events.append({
-            "ts": datetime.now().strftime("%m-%d %H:%M:%S"),
-            "kind": "llm",
-            "name": model,
-            "detail": (user or "")[:80],
-            "system": (system or "")[:40],
-            "pt": prompt_tokens,
-            "ct": completion_tokens,
-            "cost": round(cost, 6),
-        })
+        _events.append(
+            {
+                "ts": datetime.now().strftime("%m-%d %H:%M:%S"),
+                "kind": "llm",
+                "name": model,
+                "detail": (user or "")[:80],
+                "system": (system or "")[:40],
+                "pt": prompt_tokens,
+                "ct": completion_tokens,
+                "cost": round(cost, 6),
+            }
+        )
         _totals["llm_calls"] += 1
         _totals["prompt_tokens"] += prompt_tokens
         _totals["completion_tokens"] += completion_tokens
@@ -60,18 +63,20 @@ def record_tool(tool: str, input_head: str, before: dict, after: dict, ms: int, 
     ct = max(after.get("ct", 0) - before.get("ct", 0), 0)
     n_llm = max(after.get("llm_calls", 0) - before.get("llm_calls", 0), 0)
     with _lock:
-        _events.append({
-            "ts": datetime.now().strftime("%m-%d %H:%M:%S"),
-            "kind": "tool",
-            "name": tool,
-            "detail": (input_head or "")[:80],
-            "ms": ms,
-            "llm": n_llm,
-            "pt": pt,
-            "ct": ct,
-            "cost": round(_cost(pt, ct), 6),
-            "ok": ok,
-        })
+        _events.append(
+            {
+                "ts": datetime.now().strftime("%m-%d %H:%M:%S"),
+                "kind": "tool",
+                "name": tool,
+                "detail": (input_head or "")[:80],
+                "ms": ms,
+                "llm": n_llm,
+                "pt": pt,
+                "ct": ct,
+                "cost": round(_cost(pt, ct), 6),
+                "ok": ok,
+            }
+        )
         _totals["tool_calls"] += 1
 
 

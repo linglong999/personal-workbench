@@ -20,6 +20,10 @@ temp_*/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.db
 
 # ── 编辑器 / 系统 ──────────
 .idea/

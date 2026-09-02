@@ -1,4 +1,5 @@
 """多 Agent 角色：每个 Agent 封装一种协作职责。"""
+
 from workbench.knowledge.vault import VaultStore
 
 
