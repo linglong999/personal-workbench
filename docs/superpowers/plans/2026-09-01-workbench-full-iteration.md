@@ -1153,19 +1153,22 @@ git commit -m "feat(widgets): M0-B5 widget 容器框架（统一接口 + 注册�
 
 ### M0 · 成功准则核对
 
+> **M0 收口语（2026-09-02，43 test / coverage 85.49% / mypy、ruff 干净 / 前端 lint 0 + build 无回归）：**
+> 第 2 版成真线收口——补 `test_bridge_endpoints.py`（7 个业务端点 happy path + 鉴权拒访）+ `test_usage.py`（观测模块单测，作 M4 升级 SQLite 回归基准）+ `tests/helpers.py`（fake 组件替代模块级单例，不碰真实 IO）。`fail_under` 封 85；`pythonpath=["src","tests"]` 使 CI 不再依赖 `PYTHONPATH`。剩余缺口是 ADR-0001 D5 明列的低价值胶水（Obsidian 注册表 IO / 真实 LLM 调用 / `__main__`），有意不凑数。
+
 M0 完成标志：
 
-- [ ] 后端 CI 全绿（coverage≥85%，pytest、mypy、ruff 通过）
+- [x] 后端 CI 全绿（coverage≥85%，pytest、mypy、ruff 通过）
 
-- [ ] 前端 React 工程可构建、现有功能零回归
+- [x] 前端 React 工程可构建、现有功能零回归
 
-- [ ] 注册/登录/JWT 闭环可用，未登录无法进入
+- [x] 注册/登录/JWT 闭环可用，未登录无法进入
 
-- [ ] GridStack 拖拽布局可保存；多主题可切换
+- [x] GridStack 拖拽布局可保存；多主题可切换
 
-- [ ] Widget 容器已搭好接口，可挂载
+- [x] Widget 容器已搭好接口，可挂载
 
-- [ ] ADR/架构文档/changelog 落盘
+- [x] ADR/架构文档/changelog 落盘
 
 ***
 

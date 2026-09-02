@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.8.0] - 2026-09-02
+
+### Changed（M0 收口语 · 覆盖率 70%→85%）
+
+- `pyproject.toml` `fail_under` 提至 85（ADR-0001 D5 分阶段收紧的最终线），CI 门禁封板
+- 顺带修 pytest `pythonpath = ["src","tests"]` 配置（此前 CI 依赖环境变量 `PYTHONPATH` 才可导入）
+
+### Added（M0 收口语 · 补测试批次，非凑数）
+
+- `tests/helpers.py`：端点测试共享——独立鉴权（独立 db/secret）+ fake 组件（FakeVector/Vault/Classifier/Reviewer/Coach），绝不触碰真实 Vault/Chroma/Obsidian 注册表
+- `tests/test_bridge_endpoints.py`：7 个业务端点（search_knowledge / list_tags / usage / create_note / classify_text / scan_decision_closed_loop / reopen_task）happy path + 鉴权拒访回归——给前端 LIVE 的 API 契约补上自动化防线
+- `tests/test_usage.py`：usage 观测模块单测（计数 / 成本公式 / 增量 diff / 上限截断 / reset），并锁定现有行为作 M4 升级 SQLite 的回归基准
+
+### 实测
+
+- 43 test 全过，coverage 85.49%（此前 79%）；ruf / mypy 干净；前端 lint 0 + build 无回归
+- 剩余缺口为低价值胶水：Obsidian 注册表 IO / LLM 真调用分支 / `__main__`（见 ADR-0001 D5）
+
 ## [0.7.0] - 2026-09-02
 
 ### Added（M0-B5 · Widget 容器框架）

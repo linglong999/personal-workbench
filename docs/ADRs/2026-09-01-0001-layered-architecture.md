@@ -42,7 +42,10 @@ docs/      ADR / architecture / plans / specs
 
 ### D5 · 质量门槛：分阶段收紧
 
-- 最终目标 coverage ≥85%，但分阶段执行：B0 过渡阈值 50%（bridge/usage 尚无测试，结构性事实）→ B1 补 auth/bridge 测试后提到 70% → M0 收口（B4/B5 后）达 85%。
+- 最终目标 coverage ≥85%，分阶段执行：B0 过渡阈值 50%（bridge/usage 尚无测试，结构性事实）→ B1 补 auth/bridge 测试后提到 70% → **M0 收口达成 85%（2026-09-02，实测 85.49%）**。
+- 收口语（第 2 版成真线，非凑数）：补 `test_bridge_endpoints.py` 覆盖 7 个业务端点 happy path + 鉴权拒访——给前端 LIVE 的 API 契约补回归防线；补 `test_usage.py` 锁定 usage 观测行为（作 M4 升级 SQLite 的回归基准）；`tests/helpers.py` 用 fake 组件替代模块级单例，不碰真实外部 IO。
+- `pyproject.toml` `fail_under` 已封 85；`pythonpath=["src","tests"]` 配置使 CI 不再依赖 `PYTHONPATH` 环境变量。
+- 有意不追到 100% 的剩余缺口（低价值/环境相关）：Obsidian 注册表 IO（`_registry_path`/`_registered_vault_for`）、真实 LLM 调用分支（`llm.py`/`engine.py`）、`__main__` 启动块、平台特化路径。追这些应__计数凑数不增价值__，留真实业务演进（M4 重写 usage 存储等）。
 - 工具链：ruff（lint+format）+ mypy（explicit_package_bases + mypy_path=src 组合下 `mypy src` 可用）+ pytest-cov + GitHub Actions CI（backend job 先行，frontend job 待 B2 启用）。
 
 ## 后果

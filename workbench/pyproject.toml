@@ -33,6 +33,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["src", "tests"]
 
 [tool.ruff]
 line-length = 100
@@ -60,6 +61,7 @@ source = ["src/workbench"]
 omit = ["src/workbench/__main__.py"]
 
 [tool.coverage.report]
-# 分阶段收紧：B0=50%（已过，实测52.8%）→ B1=70%（已过，实测78.5%）；
-# M0 收口（B4/B5 后）达到最终目标 85%。
-fail_under = 70
+# 分阶段收紧：B0=50%（实测52.8%）→ B1=70%（实测78.5%）→ M0 收口 85%。
+# 收口语：补 7 个业务端点 happy path + usage 模块单测（第 2 版成真线，非凑数），
+# 实测 85.49%。剩余缺口为低价值胶水：Obsidian 注册表 IO / LLM 真调用分支 / __main__（见 ADR-0001）。
+fail_under = 85
