@@ -8,6 +8,8 @@ module.exports = {
   settings: { react: { version: 'detect' } },
   rules: {
     'react/prop-types': 'off',
+    // GridStack 布局属性（gs-x/gs-y/gs-w/gs-h/gs-id）
+    'react/no-unknown-property': ['error', { ignore: ['gs-x', 'gs-y', 'gs-w', 'gs-h', 'gs-id'] }],
   },
   ignorePatterns: ['dist', 'node_modules'],
 }

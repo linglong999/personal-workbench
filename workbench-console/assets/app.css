@@ -26,6 +26,7 @@
   --ok:   oklch(52% 0.07 160);          /* 青石绿 完成 */
   --warn: oklch(60% 0.11 65);           /* 暖杏 待确认 */
   --err:  oklch(52% 0.11 28);           /* 锈红 风险 */
+  --bg-main-card: oklch(98% 0.015 90);  /* 知识主卡底（主题可覆盖）*/
   /* geometry */
   --r-lg: 16px; --r-md: 12px; --r-sm: 8px;
   --shadow: 0 1px 2px oklch(30% 0.02 60 / 0.06), 0 10px 28px oklch(30% 0.02 60 / 0.07);
@@ -286,7 +287,7 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
 
 /* 知识库 */
 .library { display: flex; flex-direction: column; gap: 12px; }
-.kb-main { background: oklch(98% 0.015 90); }
+.kb-main { background: var(--bg-main-card); }
 .kb-card {
   background: var(--bg-raise); border: 1px solid var(--rule); border-radius: var(--r-md);
   padding: 16px; box-shadow: var(--shadow);
@@ -375,7 +376,7 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
 /* ═══════════ Toast / 弹层 ═══════════ */
 .toast {
   position: absolute; right: 20px; bottom: 20px; z-index: 30;
-  background: var(--ink); color: #fff; padding: 10px 16px; border-radius: var(--r-md);
+  background: var(--ink); color: var(--bg-app); padding: 10px 16px; border-radius: var(--r-md);
   font-size: 0.85rem; box-shadow: var(--shadow);
   opacity: 0; transform: translateY(8px); pointer-events: none;
   transition: opacity .25s, transform .25s;
@@ -437,6 +438,38 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
   border-color: oklch(78% 0.05 70);
 }
 .mode-chip.is-live:hover { border-color: var(--acc); }
+
+/* ═══════════ GridShell（M0-B3 拖拽/缩放容器）═══════════ */
+.grid-shell {
+  position: relative; /* GridStack 绝对定位 item 的基准 */
+  min-height: 200px;
+}
+.grid-shell .grid-stack-item-content {
+  overflow: auto; /* widget 内容超高时内部滚动，不撑破格子 */
+}
+/* 拖拽手柄：卡片右上角，hover 才显现；卡片本体保留点击语义 */
+.kb-grip {
+  position: absolute; top: 8px; right: 10px; z-index: 5;
+  color: var(--muted); cursor: grab; font-size: 0.9rem;
+  opacity: 0; transition: opacity .15s; user-select: none;
+  padding: 2px 4px;
+}
+.grid-stack-item:hover .kb-grip { opacity: 0.75; }
+.kb-grip:active { cursor: grabbing; }
+/* GridStack 缩放手柄对齐主题 */
+.grid-shell .gs-resize-handle { color: var(--muted); }
+/* widget 化的知识卡：格子内自适应高度 */
+.grid-shell .kb-card { height: 100%; overflow: auto; }
+
+/* 命令面板 · 分组（M0-B3 命令搜索）*/
+.cmd-group-name {
+  display: block; padding: 8px 12px 2px;
+  font-size: 0.68rem; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase;
+}
+.cmd-group > ul { list-style: none; }
+.cmd-empty { padding: 10px 12px; color: var(--muted); }
+
+
 
 /* 检索视图 · LIVE */
 .live-search { padding: 20px 4px 0; }

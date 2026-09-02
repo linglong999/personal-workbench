@@ -2,6 +2,27 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.5.0] - 2026-09-02
+
+### Added（M0-B3 · 拖拽布局 + 多主题 + 命令搜索）
+
+- GridStack 13.2.0：`src/shell/GridShell.jsx`（拖拽/缩放/布局自动保存）+ `src/shell/layout.js`
+  （`wb-layout:<key>` 按容器命名空间持久化）；知识视图 4 卡 widget 化，`⠿` 手柄拖拽、
+  卡片本体保留点击检索语义
+- React 与 GridStack 共存约定：item DOM 由 React 渲染、位置由 GridStack 接管；
+  恢复布局不走 `grid.load()`（会动 DOM），渲染前用 saved 覆盖初始位置；卸载 `destroy(false)`
+- 多主题：`src/theme/themes.js` 定义完整原始 token 集（非仅语义别名），`ThemeProvider`
+  写 documentElement（先清后写防残留）；paper=原值（默认零变化）/ midnight=书香暗夜，
+  `wb-theme` 持久化；入口两处（设置页外观卡 + 命令面板）
+- 命令面板增强：命令注册表 17 条（操作/外观/导航分组）+ 输入过滤 + ↑↓/Enter/Esc 键盘流；
+  计划中的「重建索引」无对应后端端点，不造假功能，以「恢复默认布局」真实功能替代
+- ESLint 对 GridStack 的 `gs-*` 布局属性放行（`react/no-unknown-property` ignore 列表）
+
+### Changed（M0-B3 · 顺带 token 化，视觉零变化）
+
+- `.kb-main` 背景硬编码 → `--bg-main-card`；`.btn` 白字 `#fff` → `var(--bg-app)`
+  （暗色主题下可读性）；小面积装饰浅色暗色下偏亮已登记后续打磨
+
 ## [0.4.0] - 2026-09-02
 
 ### Changed（M0-B2 · 前端 React 化，功能等价迁移）

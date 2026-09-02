@@ -804,7 +804,7 @@ git commit -m "refactor(console): M0-B2 迁移为 React+Vite，功能等价、�
 
 - Modify: `workbench-console/src/components/CommandPalette.jsx`（增强命令搜索）
 
-- [ ] **Step 1: 安装 GridStack**
+- [x] **Step 1: 安装 GridStack**
 
 Run（cwd=workbench-console）:
 
@@ -812,7 +812,7 @@ Run（cwd=workbench-console）:
 npm install gridstack
 ```
 
-- [ ] **Step 2: 布局读写模块**
+- [x] **Step 2: 布局读写模块**
 
 Create `workbench-console/src/shell/layout.js`:
 
@@ -832,7 +832,7 @@ export function saveLayout(l) {
 }
 ```
 
-- [ ] **Step 3: Create GridShell（拖拽 + 缩放 + 自动保存）**
+- [x] **Step 3: Create GridShell（拖拽 + 缩放 + 自动保存）**
 
 Create `workbench-console/src/shell/GridShell.jsx`:
 
@@ -861,7 +861,7 @@ export default function GridShell({ children }) {
 }
 ```
 
-- [ ] **Step 4: 多主题**
+- [x] **Step 4: 多主题**
 
 Create `workbench-console/src/theme/themes.js`:
 
@@ -904,7 +904,7 @@ export function useTheme() {
 }
 ```
 
-- [ ] **Step 5: 接入 App**
+- [x] **Step 5: 接入 App**
 
 Modify `workbench-console/src/App.jsx`：
 
@@ -923,26 +923,34 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 6: 命令搜索增强**
+- [x] **Step 6: 命令搜索增强**
 
 Modify `workbench-console/src/components/CommandPalette.jsx`：在既有 Ctrl+K 基础上，新增命令注册表（重建索引、切主题 `<t>`, 搜索<`/`>等），并支持通过列表项执行。
 
-- [ ] **Step 7: 手动验收**
+- [x] **Step 7: 手动验收**
 
 Run（cwd=workbench-console）`npm run dev` → :8212。验收：
 
-- [ ] 拖拽/缩放某个 widget，刷新页面后布局保持
+- [x] 拖拽/缩放某个 widget，刷新页面后布局保持
 
-- [ ] 切换主题（设置页或命令面板），配色即时变更且持久
+- [x] 切换主题（设置页或命令面板），配色即时变更且持久
 
-- [ ] Ctrl+K 打开命令面板，可搜索并执行命令
+- [x] Ctrl+K 打开命令面板，可搜索并执行命令
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add workbench-console/package.json workbench-console/src/shell workbench-console/src/theme workbench-console/src/App.jsx workbench-console/src/components
 git commit -m "feat(shell): M0-B3 GridStack 拖拽布局保存 + 多主题 + 命令搜索"
 ```
+
+> **B3 执行记录（2026-09-02，build ✓ 68 模块 / lint 0 error / 浏览器验收 A·B·C·D 全 PASS）：**
+> 1. **GridStack 13.2.0**（计划模板写于旧版）。**React 集成约定**（与计划模板 children 模式有意不同）：item DOM 由 React 渲染（`.grid-stack-item` + `gs-*` 属性），位置由 GridStack 接管；恢复布局不走 `grid.load()`（会动 DOM、与 React 冲突），渲染前用 saved 覆盖初始位置；卸载 `destroy(false)` 只解绑行为。GridShell 约束 item 内容静态（卡片数据常量化），为 B5 widget 容器复用铺路。
+> 2. **落位场景**：知识视图 4 卡 widget 化（RCA 大卡 + 3 小卡，`wb-layout:knowledge` 按容器 key 命名空间存布局，B5 多容器可扩展）。拖拽用手柄 `⠿`（`.kb-grip`，hover 显现），卡片本体保留点击检索语义（验收 C6 过）。
+> 3. **主题真实生效的关键**：计划模板 themes 只切 B2 语义别名 token，但组件样式读的是 app.css 原始 token——直接照抄会导致切主题无任何视觉变化。落地为 themes.js 定义**完整原始 token 集**（surfaces/ink/gold/ink-panel/states/shadow + 语义别名），ThemeProvider 写 documentElement（先清后写防残留）。paper=原值（默认零变化），midnight=书香暗夜（暖褐黑+亮铜金）。
+> 4. **顺带 token 化 2 处硬编码**（值不变、视觉零变化）：`.kb-main` 背景 → `--bg-main-card`；`.btn` 白字 `#fff` → `var(--bg-app)`（暗色下墨底白字会不可读）。其余小面积装饰浅色（kind 标签底/tag-soft/边框等）暗色下偏亮但可辨识，**登记后续打磨**，不在 B3 扩面。
+> 5. **命令面板**：命令注册表 17 条（操作 5 / 外观 3 / 导航 9），输入过滤（includes 模糊匹配）+ 分组渲染 + ↑↓/Enter/Esc 键盘流。计划提的「重建索引」命令无后端端点（MCP 5 工具中没有），**不造假功能**，以「恢复默认布局」命令替代（真实功能：resetLayout + 刷新）。主题入口两处：设置页外观卡 + 命令面板。
+> 6. **验收**（浏览器自动化三轮）：A 组命令面板（17 条分组/过滤/Enter 执行导航）✓；B 组主题（暗夜即时生效+刷新持久+切回）✓；C 组 GridStack（grid.update 移动/缩放 → wb-layout 保存 → 刷新布局保持 → 点击语义保留）✓；D 组回归（九视图无白屏/无业务 JS error）✓。注：`react/no-unknown-property` 对 gs-* 放行（eslint ignore 列表）。
 
 ### M0-B4 · 前端认证入口（登录/注册 + 路由守卫）
 

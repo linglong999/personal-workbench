@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMode, setMode } from './api/client.js'
+import { ThemeProvider } from './theme/ThemeProvider.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import InputBar from './components/InputBar.jsx'
 import CardMarquee from './components/CardMarquee.jsx'
@@ -17,8 +18,16 @@ import SearchView from './views/SearchView.jsx'
 import UsageView from './views/UsageView.jsx'
 import SettingsView from './views/SettingsView.jsx'
 
-/* 外壳编排：视图路由 + MOCK/LIVE 模式 + toast + 侧栏折叠 + 全局快捷键。 */
+/* 外壳编排：视图路由 + MOCK/LIVE 模式 + toast + 侧栏折叠 + 全局快捷键 + 主题。 */
 export default function App() {
+  return (
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
+  )
+}
+
+function Shell() {
   const [mode, setModeState] = useState(getMode())
   const [view, setView] = useState('inbox')
   const [sideHidden, setSideHidden] = useState(false)
@@ -121,7 +130,7 @@ export default function App() {
           {view === 'tags' && <TagsView mode={mode} toast={toast} onSearch={searchFor} />}
           {view === 'search' && <SearchView mode={mode} toast={toast} pending={pendingSearch} />}
           {view === 'usage' && <UsageView mode={mode} toast={toast} />}
-          {view === 'settings' && <SettingsView />}
+          {view === 'settings' && <SettingsView toast={toast} />}
         </div>
 
         <Toast msg={toastMsg} />
@@ -129,7 +138,13 @@ export default function App() {
 
       <ContextPanel onSearch={searchFor} />
 
-      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} mode={mode} toast={toast} />
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        mode={mode}
+        toast={toast}
+        onNav={setView}
+      />
       <AIConfirmModal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
