@@ -2,6 +2,22 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.11.0] - 2026-09-02
+
+### Added（M1-B3 · ReAct 主管 + 状态机）
+
+- `ai/orchestrator.py`：六状态机（IDLE/INGEST/ACTING/WAITING_HUMAN/DONE/ERROR）+ 每跳必产 DomainEvent（B4 TraceStore 的原料）+ 主管级 interrupt 接线（action needs_confirmation→confirm；decision needs_judgement→judgement）+ resume 续跑 + Guards 三守护（max_steps/budget_seconds/human_wait_timeout，超时按放弃→DONE）
+- `ai/policy.py`：策略=主管的"想"（纯函数式，只读 RunView 返回一条指令）——RulePolicy 确定性路由（分类→按标签走价值环节→recall 收尾"带着经验回来"）；resume 安全默认：confirm/judgement 非 approve 一律不写库（宁可不写，不可误写）
+- `tests/test_orchestrator.py`：24 个测试——决策全链/三类 interrupt（含非法裁决安全默认）/放弃与等待超时/守护与异常/事件链完整性/DONE·ERROR 后重开回合/各标签路由
+
+### Fixed（review 抓到的 1 个真 bug）
+
+- budget_seconds 计入了人机等待时间——用户思考超过 budget 后 approve 会被误判 "budget exceeded"（守护语义是机器时间）；修复：resume 时重置计时起点，并补回归测试（budget 不计等待时间）
+
+### 实测
+
+- 88 test 全过（+24），coverage 92.00%（orchestrator.py、policy.py 均 100%），ruff / mypy 干净
+
 ## [0.10.0] - 2026-09-02
 
 ### Added（M1-B2 · decision/action 两个新 Skill，注册表满 5）

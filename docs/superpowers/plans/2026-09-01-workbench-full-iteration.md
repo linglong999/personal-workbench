@@ -1405,11 +1405,30 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 > 4. **契约落点**：decision 输出 `needs_judgement`（<0.6）+ clarify（B3 映射 disambiguate/judgement）；action 未确认零副作用（幂等）+ 预览带起草内容（B3 confirm interrupt 直接可展示）；决策备忘正文含「关联问题」（review 闭环契约）、待办正文含「次日跟进」（跟进信号落在正文，不另立文件夹）。
 > 5. **六层 prompt**：decision=决策层（结构化追问+多维分析，confidence 反映信息充分度）；action 起草=实践层（备忘三节「背景/决定/关联问题」、待办两节「下一步/次日跟进」，「不编造用户没给的事实」）。
 
+### M1-B3 · ReAct 主管 + 状态机（逐任务 TDD）
+
+> **设计落地（兑现 M1-A/B 骨架，2026-09-02 补写）：** `ai/policy.py`（策略=主管的"想"）+ `ai/orchestrator.py`（状态机=主管的"行"）。M1 策略为**确定性规则路由**（ReAct 框架先立、Thought 为规则；LLM 自由规划留 M5+ 评测水位后）——保证可测、可回放。
+> **recall 收尾：** 每个流程以 recall 结束并把结果附在 Finish 输出（"带着经验回来"）——B5 退役 agents.py 后主管必须承接召回职责，否则召回能力随退役消失。
+> **human_wait_timeout 语义：** 超时按"放弃"→DONE（非 ERROR；对齐状态表"放弃→DONE"，且此时无副作用，安全）。
+> **resume 安全默认：** 非 approve 的裁决一律不触发写库（宁可不写，不可误写）。
+
+- [x] **Step 1（红）**：`tests/test_orchestrator.py` ——
+  1. 决策 happy path 全链：classify→decision→action 草稿→confirm interrupt→resume approve→written→recall→finish；断言 TurnResult、Vault 落盘（1 张备忘）、事件名序列与 tool 序列
+  2. 三类 interrupt：judgement（低置信；approve 继续 / reject 不写库）、confirm（reject / 非法 action 均不写库——安全默认）、disambiguate（未知标签→候选五类→pick 路由；无效 pick 结束）
+  3. abandon：等待中放弃→DONE 不写库；human_wait_timeout：超时→DONE（放弃语义）+ 未超时正常 resume
+  4. 守护：max_steps（LoopPolicy 循环策略）/ budget（自动推进假钟）/ 空输入→ERROR / 技能异常→ERROR / 策略异常→ERROR / 非法 resume 与运行中重入→RuntimeError
+  5. 事件链完整性：相邻事件 state_to==state_from、首事件自 IDLE、末事件至 DONE/ERROR；DONE 后重开新回合（DONE→INGEST，轨迹清零）
+- [x] **Step 2（绿）**：`ai/policy.py`（RunSkill/Interrupt/Finish 指令 + RunView 轨迹视图 + RulePolicy 五类路由）+ `ai/orchestrator.py`（六状态 + 每跳 DomainEvent + 主管级 interrupt 接线（action needs_confirmation→confirm；decision needs_judgement→judgement）+ resume + Guards 三守护）
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+- [x] **Step 4**：review + CHANGELOG + commit
+
+> **B3 执行记录（2026-09-02，88 test / coverage 92.00% / ruff、mypy 干净）：** 实现 ReAct 主管状态机（六状态流转）+ RulePolicy 确定性路由 + 三类 interrupt 接线 + DomainEvent 事件链；24 个测试覆盖 happy path/中断/resume/守护/事件链完整性/各标签路由。**review 抓到 1 个真 bug 并修复**：budget_seconds 计入了人机等待时间（用户思考 10 分钟后 approve 会被误判 "budget exceeded"）——守护语义是机器时间，resume 时重置计时起点；补 2 测试（budget 不计等待时间、ERROR 后重开回合——docstring 声明但未测）。另确认：`ruff format` 非项目门槛（CI 只跑 `ruff check`），存量格式漂移不动以免混批次。
+
 ### M1 · 成功准则核对
 
 M1 完成标志：
 
-- [ ] ReAct 主管 Orchestrator 存在，状态图（IDLE/INGEST/ACTING/WAITING\_HUMAN/DONE/ERROR）可跑
+- [x] ReAct 主管 Orchestrator 存在，状态图（IDLE/INGEST/ACTING/WAITING\_HUMAN/DONE/ERROR）可跑
 
 - [x] 5 个 Skill（classify/decision/action/review/recall）全部注册进注册表，从注册表按名可取
 
@@ -1417,13 +1436,13 @@ M1 完成标志：
 
 - [x] 2 个新 Skill（decision/action）有红转绿测试
 
-- [ ] action 写 Vault 前触发 confirm interrupt；decision 低置信触发 disambiguate/judgement（B2 已落 Skill 侧契约：标志/零副作用/拍板标记；interrupt 发射归 B3 主管）
+- [x] action 写 Vault 前触发 confirm interrupt；decision 低置信触发 disambiguate/judgement（B2 已落 Skill 侧契约：标志/零副作用/拍板标记；interrupt 发射归 B3 主管）
 
 - [ ] 每跳产生 domain event，Trace 可回放、坏例可归因
 
 - [ ] 最小 eval runner 能跑 golden case（通过/失败）；坏 Trace 可回流为回归 case
 
-- [ ] 执行守护（max\_steps/budget/human\_wait\_timeout）生效
+- [x] 执行守护（max\_steps/budget/human\_wait\_timeout）生效
 
 ***
 
