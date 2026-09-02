@@ -14,6 +14,9 @@ venv/
 build/
 dist/
 
+# ── Node ───────────────────
+node_modules/
+
 # ── 数据 / 测试缓存 ────────
 .data/
 temp_*/

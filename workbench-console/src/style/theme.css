@@ -1,0 +1,13 @@
+/* 设计 token：白·墨·金体系（语义别名层）。
+   别名与 assets/app.css 的原始 token 一一对应、取值一致（oklch），
+   组件样式仍读 app.css 原始 token；本层为 B3 多主题（ThemeProvider 换 token）预留单点。 */
+
+:root {
+  --paper: oklch(97.4% 0.008 90); /* 宣纸白 · 页面底 */
+  --ink: oklch(28% 0.012 60); /* 墨黑 · 主文字 */
+  --gold: oklch(56% 0.09 70); /* 古铜金 · AI 强调 */
+  --paper-cloud: oklch(94.5% 0.012 88); /* 云纸 · 侧栏/沉面 */
+  --muted: oklch(58% 0.02 60); /* 弱化文字 */
+  --line: oklch(88% 0.018 80); /* 米褐边框 */
+  --accent: oklch(45% 0.09 65); /* 深铜 · 链接/重点（对比更高）*/
+}

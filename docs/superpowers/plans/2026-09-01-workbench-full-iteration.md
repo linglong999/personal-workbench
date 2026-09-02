@@ -583,7 +583,7 @@ git commit -m "feat(auth): M0-B1 SQLite 用户存储 + JWT 登录注册 + Bridge
 
 - Keep: `workbench-console/assets/app.css`（迁移为 token 基础）
 
-- [ ] **Step 1: 初始化 Vite + React 工程**
+- [x] **Step 1: 初始化 Vite + React 工程**
 
 在 `workbench-console/` 下创建 `package.json`:
 
@@ -627,7 +627,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 2: 创建挂载与入口**
+- [x] **Step 2: 创建挂载与入口**
 
 Create `workbench-console/index.html`:
 
@@ -661,7 +661,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 )
 ```
 
-- [ ] **Step 3: 建 API 客户端（保留 MOCK/LIVE 切换）**
+- [x] **Step 3: 建 API 客户端（保留 MOCK/LIVE 切换）**
 
 Create `workbench-console/src/api/client.js`（等价迁移现有 `app.js` 的 fetch/MOCK 逻辑）:
 
@@ -700,7 +700,7 @@ export async function request(path, body) {
 
 > 说明：B4 会在此处注入 JWT —— 届时 `call` 的 headers 增 `Authorization: Bearer <token>`，从 `localStorage('wb-token')` 读取。本步先留接口。
 
-- [ ] **Step 4: 迁移视图与组件（等价复刻）**
+- [x] **Step 4: 迁移视图与组件（等价复刻）**
 
 按现有功能 1:1 迁移，每个视图/组件一个文件。核心迁移点（实现方式从 `assets/app.js` 逐项改写为组件）：
 
@@ -736,7 +736,7 @@ export async function request(path, body) {
 
 > **占位交代**：因每个文件迁移代码量大且本计划待 M0–M4 讨论完才执行，迁移期每个组件按上述职责单文件实现，执行时以 `assets/app.js` 现有逻辑为蓝本逐块移植，**确保零回归**（既有 4 轮自测坑进回归清单）。此步骤按"每组件一格 task"在真正实现阶段拆细；此处先锁定文件结构与迁移清单。
 
-- [ ] **Step 5: 迁移设计系统为 token**
+- [x] **Step 5: 迁移设计系统为 token**
 
 Create `workbench-console/src/style/theme.css`，将现有白·墨·金提取为 CSS 变量：
 
@@ -754,7 +754,7 @@ Create `workbench-console/src/style/theme.css`，将现有白·墨·金提取为
 
 （其余样式沿用 `assets/app.css` 迁移为组件级 CSS。）
 
-- [ ] **Step 6: Build + lint 通过**
+- [x] **Step 6: Build + lint 通过**
 
 Run（cwd=workbench-console）:
 
@@ -766,17 +766,25 @@ npm run lint
 
 Expected: build 产出 `dist/`，lint 无 error。
 
-- [ ] **Step 7: 回归验收（零回归）**
+- [x] **Step 7: 回归验收（零回归）**
 
 以既有自测清单（含 Obsidian URI 直开、输入落盘、MOCK/LIVE 降级、标签聚合）启动 `npm run dev`（:8212）+ Bridge（:8213）人工逐条走查。List all must-pass in regression.md（可选，执行时产出）。
 
-- [ ] **Step 8: Commit（移除旧 app.js，保留 app.css 作样式基座）**
+- [x] **Step 8: Commit（移除旧 app.js，保留 app.css 作样式基座）**
 
 ```bash
 git add workbench-console
 git rm workbench-console/assets/app.js
 git commit -m "refactor(console): M0-B2 迁移为 React+Vite，功能等价、零回归"
 ```
+
+> **B2 执行记录（2026-09-02，build ✓ 50 模块 / lint 0 error / 回归 20/20 PASS）：**
+> 1. **结构落地**：package.json + vite.config.js（:8212，base './'）+ .eslintrc.cjs（eslint:recommended + react + react-hooks）；index.html 重写为 React 挂载点（保留原 title）；`assets/app.css` 原样保留为样式基座（main.jsx 引入），组件类名与原 DOM 结构 1:1 对齐，**视觉零回归**。
+> 2. **Step 3 实现与计划模板的差异**（有意）：计划模板的 `request()` MOCK 短路与原 app.js 交互模型不符（原版是视图层判模式，MOCK 数据织入视图）。等价落地为 `api()/apiGet()` 单收口（B4 注入 Authorization 头的位置不变）+ client.js 内置 mock 数据/规则（inboxData、mockTags、mockRule、ruleFor、folderFor）。localStorage 沿用原 key `wb-mode` 与 `mock`/`live` 值（兼容老用户存量模式）。
+> 3. **组件迁移**：App.jsx 编排（视图路由/mode/toast/侧栏折叠/全局快捷键 Ctrl+B·Ctrl+K）；7 组件 + 9 视图按计划清单落位；跨视图检索用 `{q, n}` 递增 token 触发（同词可重复检索）；debounce/committing 防抖用 ref 保持原时序语义。
+> 4. **theme.css**：按计划建语义别名 token（--paper/--ink/--gold/--line/--accent…），取值与 app.css 原始 oklch token 一致，为 B3 ThemeProvider 换肤预留单点。
+> 5. **验证**：`npm install` + `npm run build`（dist 168.57kB JS / 17.77kB CSS）+ `npm run lint` 0 error；dev(:8212) + Bridge(:8213) 起服，浏览器自动化走查 20 项（九视图/输入条分类+落盘/Ctrl+K 面板键盘流/Ctrl+B/AI 确认弹层/上下文面板/模式切换/LIVE 检索 401 中间态/控制台无 JS 错）**全部 PASS，零回归**（LIVE 端点 401 为 B1→B4 计划内中间态）。
+> 6. **收尾**：.gitignore 加 `node_modules/`；CI frontend job 启用（npm ci → build → lint，package-lock.json 入库）；`git rm assets/app.js`（569 行旧逻辑全部迁入组件）。
 
 ### M0-B3 · L2 外壳新功能（GridStack 拖拽 / 布局保存 / 多主题 / 命令搜索）
 

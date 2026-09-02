@@ -29,20 +29,19 @@ jobs:
           LLM_API_KEY: "sk-test"
           LLM_MODEL: "test"
 
-  # B2（React 工程化）完成 workbench-console/package.json 后启用：
-  # frontend:
-  #   runs-on: ubuntu-latest
-  #   defaults:
-  #     run:
-  #       working-directory: workbench-console
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #     - name: Install
-  #       run: npm ci
-  #     - name: Build
-  #       run: npm run build
-  #     - name: Lint
-  #       run: npm run lint
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workbench-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lint
+        run: npm run lint

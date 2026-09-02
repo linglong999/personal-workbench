@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.4.0] - 2026-09-02
+
+### Changed（M0-B2 · 前端 React 化，功能等价迁移）
+
+- `workbench-console` 由纯静态（index.html + app.js 569 行 IIFE）迁移为 Vite + React 18 工程
+  （`npm run dev` :8212 / `build` / `lint`），功能与视觉零回归（20 项浏览器走查全过）
+- 组件化：App 编排 + 7 组件（InputBar/Sidebar/CommandPalette/ContextPanel/AIConfirmModal/
+  CardMarquee/Toast）+ 9 视图（收件箱/今天/项目/复盘/知识/标签/检索/用量/设置）
+- `src/api/client.js`：MOCK/LIVE 模式与假数据/归位规则单点收口（B4 在此注入 JWT）；
+  localStorage 沿用原 key 与取值（老用户模式无缝保留）
+- `src/style/theme.css`：白·墨·金语义 token 别名层（为 B3 多主题换肤预留单点）
+- `assets/app.css` 保留为样式基座；`assets/app.js` 删除（逻辑全部迁入组件）
+- CI 新增 frontend job（npm ci → build → lint）；.gitignore 加 node_modules/
+
 ## [0.3.0] - 2026-09-02
 
 ### Added（M0-B1 · 后端认证）
