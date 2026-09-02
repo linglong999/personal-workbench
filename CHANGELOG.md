@@ -2,6 +2,20 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.9.0] - 2026-09-02
+
+### Added（M1-B1 · Skill 基础设施 + 3 迁移 Skill）
+
+- `src/workbench/ai/skills/` 新包（ADR-0001 D1：ai 含引擎/Agent/Skill，单向依赖 knowledge）：
+  - `base.py`：`Skill` Protocol（name/description/requires_confirmation/run）+ `SkillContext`（engine/vault/vector 注入，Skill 不依赖主管）+ `SkillResult`（output + confidence 供主管判 interrupt）
+  - `classify.py` / `review.py` / `recall.py`：逻辑迁自 Classifier/Reviewer/Coach 三个 Agent（agents.py 本批不动保 bridge 兼容，M1-B5 退役）
+  - `registry.py`：`REGISTRY` + `get_skill()`——主管唯一调度入口，未知名抛 KeyError
+- `tests/test_skills.py`：**等价迁移测试**——同一 fake 输入下 `Skill.run` 输出 == 现有 Agent 输出（迁移无回归的机制化证明）+ 注册表/协议断言
+
+### 实测
+
+- 49 test 全过（+6），coverage 87.06%（skills 包 100%），ruff / mypy 干净
+
 ## [0.8.0] - 2026-09-02
 
 ### Changed（M0 收口语 · 覆盖率 70%→85%）

@@ -1355,6 +1355,33 @@ def get_skill(name: str) -> Skill: ...
 
 > **收口界定（选项 1）**：M1 本版定稿到"设计骨架"粒度——架构、状态机、Skill 规范、注册表、5 Skill 职责与 TDD 方向。**每个 Skill 的 run() 具体实现、3 个 Agent 迁移对照表、6 层提示词工程逐层迁入这 5 个 Skill** 均为实现细节，**留到"执行 M1 之前"再展开**（届时更新本分节，写逐任务 TDD 红绿步骤）。不提前纸上谈兵，与"M0 粒度对齐"。
 
+### M1 执行分批（2026-09-02 补写，兑现上方收口界定）
+
+M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收：
+
+| 批次 | 范围 | 关键产出 |
+| --- | --- | --- |
+| **M1-B1** | Skill 基础设施 + 3 迁移 Skill | `ai/skills/` 包（base/registry + classify/review/recall），等价测试证迁移无回归 |
+| **M1-B2** | 2 新 Skill（decision/action） | TDD 红转绿；prompt 按六层文档设计（决策层/实践层） |
+| **M1-B3** | ReAct 主管 + 状态机 | 六状态图 + 三类 interrupt + resume + 守护（max_steps/budget/human_wait_timeout） |
+| **M1-B4** | Trace + eval runner | domain event 落 TraceStore（回放/归因）+ golden case runner + 坏例回流 |
+| **M1-B5** | Bridge 接线收口 | `POST /api/orchestrate` 主管入口 + agents.py 退役；前端接入范围届时与用户确认 |
+
+### M1-B1 · Skill 基础设施 + 3 迁移 Skill（逐任务 TDD）
+
+- [x] **Step 1（红）**：`tests/test_skills.py` 先写三类断言——
+  1. 注册表：3 个迁移 Skill 按名可取（B2 后补齐 5）；未知名抛 KeyError；实例满足 Skill 协议（name/description/requires_confirmation/run）
+  2. 等价迁移：同一 fake 输入下 `Skill.run` 输出 == 现有 Agent 输出（classify≈ClassifierAgent / review≈ReviewerAgent / recall≈CoachAgent）——迁移无回归的机制化证明
+  3. 3 个迁移 Skill `requires_confirmation=False`（默认自主，对齐 M1-C interrupt 映射）
+- [x] **Step 2（绿）**：`src/workbench/ai/skills/`——`base.py`（Skill Protocol + SkillContext + SkillResult）、`classify.py` / `review.py` / `recall.py`（逻辑迁自 agents；agents.py 不动保 bridge 兼容，B5 退役）、`registry.py`（REGISTRY 单向调度入口）
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破——新代码须被等价测试全覆盖）
+- [x] **Step 4**：CHANGELOG + commit
+
+> **B1 执行记录（2026-09-02，49 test / coverage 87.06% / ruff、mypy 干净）：**
+> 1. **等价迁移**：skill 与 agent 在同一 fake 输入下输出逐字段相等——等价测试常驻回归（若 agent 逻辑漂移会立刻被抓）。3 个迁移 Skill 均 `requires_confirmation=False`（M1-C：classify/review/recall 高置信默认自主）。
+> 2. **测试修正一处**（非实现 bug）：review 等价测试初版照抄 test_ai 的「孤决策 in 消息」断言，但 test_ai 用的是硬编码 fake（返回「决策备忘/孤决策 缺少关联问题」）；真实 `read_all_notes` 返回笔记**内容**，消息为「{内容} 缺少关联问题」。等价断言本身一次通过。此发现顺带揭示：engine.check_closed_loop 的消息以内容为标识，可读性差——登记为 M3 决策深化时顺手改（消息带文件名）。
+> 3. **架构对齐**：skills 落位 `ai/skills/`（ADR-0001 D1 模块图 ai 含 Skill，单向依赖 knowledge）；`SkillResult.confidence` 默认 1.0，为 B2 decision 低置信、B3 主管判 interrupt 预留。
+
 ### M1 · 成功准则核对
 
 M1 完成标志：
