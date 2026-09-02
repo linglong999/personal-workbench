@@ -4,6 +4,7 @@ import { bridgeDown } from '../utils.js'
 import { useTheme } from '../theme/ThemeProvider.jsx'
 import { THEMES } from '../theme/themes.js'
 import { resetLayout } from '../shell/layout.js'
+import { getUser, isAuthed, logout } from '../auth/auth.js'
 
 /* 命令面板（Ctrl/⌘+K）：命令注册表 + 输入过滤搜索。
    方向键选择、Enter 执行、Esc/点外关闭。
@@ -69,6 +70,20 @@ export default function CommandPalette({ open, onClose, mode, toast, onNav }) {
         run: () => toast('已沉淀「环境隔离预案」为知识卡片 [撤销]'),
       },
     ]
+
+    // 账号：登出（仅登录会话显示；演示模式无此命令）
+    if (isAuthed()) {
+      list.push({
+        id: 'logout',
+        group: '账号',
+        label: '登出（' + (getUser() || '当前用户') + '）',
+        run: () => {
+          logout()
+          toast('已登出')
+          setTimeout(() => window.location.reload(), 400)
+        },
+      })
+    }
 
     // 外观：主题切换（注册表列出全部主题，当前项跳过）+ 布局
     for (const [id, t] of Object.entries(THEMES)) {

@@ -1,9 +1,41 @@
 /* API 客户端：MOCK / LIVE 双模式。
    LIVE 走本地 Bridge（127.0.0.1:8213，FastAPI 暴露的 5 个 MCP 工具同构端点）。
-   B4 在 api()/apiGet() 的 headers 注入 Authorization: Bearer <token>（唯一收口点）。 */
+   B4：request() 统一注入 Authorization（唯一收口点）；持 token 收到 401 →
+   自动登出并广播（token 过期/后端换 secret），登录页自身的 401（密码错）不触发。 */
+
+import { getToken, logout } from '../auth/auth.js'
 
 const BASE = 'http://127.0.0.1:8213/api'
 const MODE_KEY = 'wb-mode'
+
+async function request(path, { method = 'POST', body } = {}) {
+  const token = getToken()
+  const res = await fetch(BASE + path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  })
+  if (res.status === 401 && token) {
+    logout()
+    throw new Error('登录已过期，请重新登录')
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function api(path, body) {
+  return request(path, { body: body || {} })
+}
+
+export async function apiGet(path) {
+  return request(path, { method: 'GET' })
+}
 
 export function getMode() {
   try {
@@ -13,28 +45,21 @@ export function getMode() {
   }
 }
 
+/* 原始值（null=从未选择）：RequireAuth 用它区分「未选择→登录页」与「明确选过 mock→豁免」 */
+export function getModeRaw() {
+  try {
+    return localStorage.getItem(MODE_KEY)
+  } catch {
+    return null
+  }
+}
+
 export function setMode(m) {
   try {
     localStorage.setItem(MODE_KEY, m)
   } catch {
     /* ignore */
   }
-}
-
-export async function api(path, body) {
-  const res = await fetch(BASE + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  })
-  if (!res.ok) throw new Error('HTTP ' + res.status)
-  return res.json()
-}
-
-export async function apiGet(path) {
-  const res = await fetch(BASE + path)
-  if (!res.ok) throw new Error('HTTP ' + res.status)
-  return res.json()
 }
 
 /* ───────── 归位规则（classify_text 标签 → 建议/目录）───────── */

@@ -2,8 +2,10 @@ import React from 'react'
 import { useTheme } from '../theme/ThemeProvider.jsx'
 import { THEMES } from '../theme/themes.js'
 import { resetLayout } from '../shell/layout.js'
+import { setMode } from '../api/client.js'
+import { getUser, isAuthed, logout } from '../auth/auth.js'
 
-/* 设置：外观（主题 / 布局）+ 占位（工作区 / 模型 / 白名单目录）。B4 接入认证入口。 */
+/* 设置：账号（B4 认证入口）+ 外观（主题 / 布局）+ 占位（工作区 / 模型 / 白名单目录）。 */
 export default function SettingsView({ toast }) {
   const { theme, setTheme } = useTheme()
 
@@ -18,15 +20,51 @@ export default function SettingsView({ toast }) {
     setTimeout(() => window.location.reload(), 600)
   }
 
+  // 登出：清 token 后刷新——live 无 token 落登录页；mock 留在演示模式（豁免语义不变）
+  const doLogout = () => {
+    logout()
+    toast('已登出')
+    setTimeout(() => window.location.reload(), 500)
+  }
+
+  // 演示模式下去登录：借 logout() 的认证事件广播，置 live 后 RequireAuth 落到登录页
+  const goLogin = () => {
+    setMode('live')
+    logout()
+  }
+
   return (
     <section className="view">
       <div className="empty">
         <span className="empty-ico" aria-hidden="true">⚙</span>
         <h2>设置</h2>
-        <p>工作区 / 模型 / 白名单目录。</p>
+        <p>账号 / 外观 / 工作区 / 模型 / 白名单目录。</p>
       </div>
 
-      <div className="library" style={{ marginTop: 8 }}>
+      <div className="library" style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <article className="kb-card" style={{ position: 'relative', maxWidth: 560 }}>
+          <span className="kb-type">账号</span>
+          <h3>{isAuthed() ? '已登录' : '演示模式 · 未登录'}</h3>
+          <p className="kb-desc" style={{ marginBottom: 10 }}>
+            {isAuthed()
+              ? '当前用户：' + (getUser() || '（未知）') + ' · LIVE 可访问真实 Vault 与 LLM。'
+              : '演示数据只在前端流转；连接真实后端（127.0.0.1:8213）需要登录。'}
+          </p>
+          {isAuthed() ? (
+            <button className="btn btn-ghost" onClick={doLogout}>
+              登出
+            </button>
+          ) : (
+            <button
+              className="btn"
+              style={{ background: 'var(--acc-soft)', color: 'var(--acc-deep)' }}
+              onClick={goLogin}
+            >
+              去登录 / 注册
+            </button>
+          )}
+        </article>
+
         <article className="kb-card kb-main" style={{ position: 'relative', maxWidth: 560 }}>
           <span className="kb-type">外观</span>
           <h3>主题</h3>

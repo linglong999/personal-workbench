@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMode, setMode } from './api/client.js'
 import { ThemeProvider } from './theme/ThemeProvider.jsx'
+import RequireAuth from './auth/RequireAuth.jsx'
+import { isAuthed } from './auth/auth.js'
 import Sidebar from './components/Sidebar.jsx'
 import InputBar from './components/InputBar.jsx'
 import CardMarquee from './components/CardMarquee.jsx'
@@ -22,7 +24,9 @@ import SettingsView from './views/SettingsView.jsx'
 export default function App() {
   return (
     <ThemeProvider>
-      <Shell />
+      <RequireAuth>
+        <Shell />
+      </RequireAuth>
     </ThemeProvider>
   )
 }
@@ -48,15 +52,20 @@ function Shell() {
   useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), [])
 
   const toggleMode = useCallback(() => {
-    const m = mode === 'live' ? 'mock' : 'live'
-    setMode(m)
-    setModeState(m)
-    toast(
-      m === 'live'
-        ? '已切换到 LIVE · 真实调用本地 Bridge (:8213)'
-        : '已切换到 MOCK · 使用内置演示数据',
-    )
-  }, [mode, toast])
+        const m = mode === 'live' ? 'mock' : 'live'
+        // 未登录（演示模式）不可进 LIVE：Bridge 的业务端点全部要 token
+        if (m === 'live' && !isAuthed()) {
+            toast('LIVE 需要先登录 —— 请在「设置 · 账号」登录后再切换')
+            return
+        }
+        setMode(m)
+        setModeState(m)
+        toast(
+            m === 'live'
+                ? '已切换到 LIVE · 真实调用本地 Bridge (:8213)'
+                : '已切换到 MOCK · 使用内置演示数据',
+        )
+    }, [mode, toast])
 
   // searchFor：切到检索视图并自动执行（LIVE）；MOCK 提示切换
   const searchFor = useCallback(

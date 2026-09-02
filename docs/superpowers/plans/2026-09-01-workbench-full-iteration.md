@@ -546,14 +546,15 @@ git commit -m "feat(auth): M0-B1 SQLite 用户存储 + JWT 登录注册 + Bridge
 ```
 
 > **B1 执行记录（2026-09-02，全部 26 测试绿，coverage 78.5% ≥ 70%）：**
+>
 > 1. **修正 Step 6 设计缺陷**：`require_auth` 原计划用模块常量 `_AUTH_SECRET` 解码 token，但测试 monkeypatch `auth_service`（独立 secret）后签发/校验 secret 不一致，`/api/auth/me` 必 401。改为 `AuthService.verify_token()`（secret 单源，bridge 只调不持有），monkeypatch 后全链路一致。
 > 2. **修正 repository 连接泄漏**：`with conn:` 只管事务不管关闭 → `closing(conn) + conn` 组合。
 > 3. `repo: UserRepository = field(init=False)` 标注，过 mypy（17 文件无错）。
-> 4. 鉴权端点实为 **7 个**（计划写 5 个）：search_knowledge / list_tags / usage(GET) / create_note / classify_text / scan_decision_closed_loop / reopen_task，按封板范围界定全部挂 `Depends(require_auth)`；`/api/health`、`/api/auth/*` 放行。
+> 4. 鉴权端点实为 **7 个**（计划写 5 个）：search\_knowledge / list\_tags / usage(GET) / create\_note / classify\_text / scan\_decision\_closed\_loop / reopen\_task，按封板范围界定全部挂 `Depends(require_auth)`；`/api/health`、`/api/auth/*` 放行。
 > 5. `observe_calls` 采纳计划注建议：skip 列表加 `/api/auth/`（auth 非业务调用，不记 usage 观测）。
-> 6. 测试增强（7→13 用例）：verify_token 回环/伪造、短密码、health 放行、错密码登录 401、重复注册 400。
+> 6. 测试增强（7→13 用例）：verify\_token 回环/伪造、短密码、health 放行、错密码登录 401、重复注册 400。
 > 7. `fail_under` 按分阶段约定提至 70（实测 78.5%）；JWT fallback secret 加长至 ≥32 字节（避 InsecureKeyLengthWarning）。
-> 8. **Review 修复（2026-09-02，提交前复查发现）**：① `test_auth.py` 4 处 11 字节短 secret → `b"t" * 32`（与 test_bridge 统一，InsecureKeyLengthWarning 4 处全消，19→15 个警告，余下 15 个均为 Chroma 三方库 DeprecationWarning，B0 前既有）；② `bridge.py` `_AUTH_SECRET` 补短 key 边界——LLM key 非空但 <32B 时（如 CI 的 `sk-test`）拼接 fallback 补足。修后复验：26 测试绿、coverage 78.61%、ruff 27 文件过、mypy 17 文件无错。
+> 8. **Review 修复（2026-09-02，提交前复查发现）**：① `test_auth.py` 4 处 11 字节短 secret → `b"t" * 32`（与 test\_bridge 统一，InsecureKeyLengthWarning 4 处全消，19→15 个警告，余下 15 个均为 Chroma 三方库 DeprecationWarning，B0 前既有）；② `bridge.py` `_AUTH_SECRET` 补短 key 边界——LLM key 非空但 <32B 时（如 CI 的 `sk-test`）拼接 fallback 补足。修后复验：26 测试绿、coverage 78.61%、ruff 27 文件过、mypy 17 文件无错。
 
 ### M0-B2 · 前端 React 化（Vite + React 脚手架 + 视图迁移）
 
@@ -779,6 +780,7 @@ git commit -m "refactor(console): M0-B2 迁移为 React+Vite，功能等价、�
 ```
 
 > **B2 执行记录（2026-09-02，build ✓ 50 模块 / lint 0 error / 回归 20/20 PASS）：**
+>
 > 1. **结构落地**：package.json + vite.config.js（:8212，base './'）+ .eslintrc.cjs（eslint:recommended + react + react-hooks）；index.html 重写为 React 挂载点（保留原 title）；`assets/app.css` 原样保留为样式基座（main.jsx 引入），组件类名与原 DOM 结构 1:1 对齐，**视觉零回归**。
 > 2. **Step 3 实现与计划模板的差异**（有意）：计划模板的 `request()` MOCK 短路与原 app.js 交互模型不符（原版是视图层判模式，MOCK 数据织入视图）。等价落地为 `api()/apiGet()` 单收口（B4 注入 Authorization 头的位置不变）+ client.js 内置 mock 数据/规则（inboxData、mockTags、mockRule、ruleFor、folderFor）。localStorage 沿用原 key `wb-mode` 与 `mock`/`live` 值（兼容老用户存量模式）。
 > 3. **组件迁移**：App.jsx 编排（视图路由/mode/toast/侧栏折叠/全局快捷键 Ctrl+B·Ctrl+K）；7 组件 + 9 视图按计划清单落位；跨视图检索用 `{q, n}` 递增 token 触发（同词可重复检索）；debounce/committing 防抖用 ref 保持原时序语义。
@@ -945,12 +947,13 @@ git commit -m "feat(shell): M0-B3 GridStack 拖拽布局保存 + 多主题 + 命
 ```
 
 > **B3 执行记录（2026-09-02，build ✓ 68 模块 / lint 0 error / 浏览器验收 A·B·C·D 全 PASS）：**
+>
 > 1. **GridStack 13.2.0**（计划模板写于旧版）。**React 集成约定**（与计划模板 children 模式有意不同）：item DOM 由 React 渲染（`.grid-stack-item` + `gs-*` 属性），位置由 GridStack 接管；恢复布局不走 `grid.load()`（会动 DOM、与 React 冲突），渲染前用 saved 覆盖初始位置；卸载 `destroy(false)` 只解绑行为。GridShell 约束 item 内容静态（卡片数据常量化），为 B5 widget 容器复用铺路。
 > 2. **落位场景**：知识视图 4 卡 widget 化（RCA 大卡 + 3 小卡，`wb-layout:knowledge` 按容器 key 命名空间存布局，B5 多容器可扩展）。拖拽用手柄 `⠿`（`.kb-grip`，hover 显现），卡片本体保留点击检索语义（验收 C6 过）。
 > 3. **主题真实生效的关键**：计划模板 themes 只切 B2 语义别名 token，但组件样式读的是 app.css 原始 token——直接照抄会导致切主题无任何视觉变化。落地为 themes.js 定义**完整原始 token 集**（surfaces/ink/gold/ink-panel/states/shadow + 语义别名），ThemeProvider 写 documentElement（先清后写防残留）。paper=原值（默认零变化），midnight=书香暗夜（暖褐黑+亮铜金）。
 > 4. **顺带 token 化 2 处硬编码**（值不变、视觉零变化）：`.kb-main` 背景 → `--bg-main-card`；`.btn` 白字 `#fff` → `var(--bg-app)`（暗色下墨底白字会不可读）。其余小面积装饰浅色（kind 标签底/tag-soft/边框等）暗色下偏亮但可辨识，**登记后续打磨**，不在 B3 扩面。
 > 5. **命令面板**：命令注册表 17 条（操作 5 / 外观 3 / 导航 9），输入过滤（includes 模糊匹配）+ 分组渲染 + ↑↓/Enter/Esc 键盘流。计划提的「重建索引」命令无后端端点（MCP 5 工具中没有），**不造假功能**，以「恢复默认布局」命令替代（真实功能：resetLayout + 刷新）。主题入口两处：设置页外观卡 + 命令面板。
-> 6. **验收**（浏览器自动化三轮）：A 组命令面板（17 条分组/过滤/Enter 执行导航）✓；B 组主题（暗夜即时生效+刷新持久+切回）✓；C 组 GridStack（grid.update 移动/缩放 → wb-layout 保存 → 刷新布局保持 → 点击语义保留）✓；D 组回归（九视图无白屏/无业务 JS error）✓。注：`react/no-unknown-property` 对 gs-* 放行（eslint ignore 列表）。
+> 6. **验收**（浏览器自动化三轮）：A 组命令面板（17 条分组/过滤/Enter 执行导航）✓；B 组主题（暗夜即时生效+刷新持久+切回）✓；C 组 GridStack（grid.update 移动/缩放 → wb-layout 保存 → 刷新布局保持 → 点击语义保留）✓；D 组回归（九视图无白屏/无业务 JS error）✓。注：`react/no-unknown-property` 对 gs-\* 放行（eslint ignore 列表）。
 
 ### M0-B4 · 前端认证入口（登录/注册 + 路由守卫）
 
@@ -968,7 +971,7 @@ git commit -m "feat(shell): M0-B3 GridStack 拖拽布局保存 + 多主题 + 命
 
 - Modify: `workbench-console/src/App.jsx`（登录门：未持 token 显示登录页）
 
-- [ ] **Step 1: token 模块**
+- [x] **Step 1: token 模块**
 
 Create `workbench-console/src/auth/auth.js`:
 
@@ -989,7 +992,7 @@ export function logout() { setToken(null); setUser(null) }
 export function isAuthed() { return Boolean(getToken()) }
 ```
 
-- [ ] **Step 2: API 客户端注入 token**
+- [x] **Step 2: API 客户端注入 token**
 
 Modify `workbench-console/src/api/client.js` 的 `call`：
 
@@ -1015,27 +1018,35 @@ async function call(path, body) {
 }
 ```
 
-- [ ] **Step 3: 登录/注册页**
+- [x] **Step 3: 登录/注册页**
 
 Create `workbench-console/src/auth/LoginPage.jsx`（含邮箱 tips：用户名 + 密码 ≥6；提交后 `setToken(setUser)`，跳 `/#/`）。RegisterPage 同理，先调 `/api/auth/register`。
 
-- [ ] **Step 4: 路由守卫 + 接入 App**
+- [x] **Step 4: 路由守卫 + 接入 App**
 
 Create `workbench-console/src/auth/RequireAuth.jsx`：`isAuthed()` 为假 → 渲染 `<LoginPage/>`；为真 → 渲染 children。
 
 Modify `App.jsx`：外层包 `<RequireAuth>`。
 
-- [ ] **Step 5: 手动验收**
+- [x] **Step 5: 手动验收**
 
-- [ ] 未登录访问 :8212 → 跳登录页
+- [x] 未登录访问 :8212 → 跳登录页
 
-- [ ] 注册新用户 → 自动登录进工作台
+- [x] 注册新用户 → 自动登录进工作台
 
-- [ ] 登出 → 回登录页；再访问受保护页被拦
+- [x] 登出 → 回登录页；再访问受保护页被拦
 
-- [ ] 手动改坏 token → 401 → 自动登出回登录
+- [x] 手动改坏 token → 401 → 自动登出回登录
 
-- [ ] **Step 6: Commit**
+> **B4 执行记录（2026-09-02，build ✓ 71 模块 / lint 0 error / 浏览器验收 A·B·C·D·E 全 PASS）：**
+> 1. **登录/注册合为 AuthPage**（计划模板分两个文件）：两态逻辑几乎相同，合并为单文件双 tab 减重复；后端 `/api/auth/login` 与 `/api/auth/register` 请求体一致（`AuthReq{username,password}`）。后端错误 detail 英文（`invalid credentials`/`password too short (min 6)`/`username already exists: …`），前端 catch 映射为中文友好提示（已补验：错误密码→「用户名或密码不正确」）。
+> 2. **登录门设计决策**：计划模板要求 `location.href='/#/login'`，但项目无 URL 路由（视图是 React state），改为事件驱动——`auth.js` 派发 `wb-auth` 事件，`RequireAuth` 监听后重渲染。落地发现 `getMode()` 的 `||'mock'` 兜底使全新用户也豁免、登录页永远不出现；修正为新增 `getModeRaw()` 区分「未选择→登录页」与「明确选过 mock→豁免」。开源用户 clone 后仍可一键演示，零配置体验不受影响。
+> 3. **演示模式豁免**：RequireAuth 放行条件 = `isAuthed() || getModeRaw()==='mock'`；LIVE 未持 token → 登录页。登录/注册成功后 `setMode('live')` + `setToken`；演示按钮只 `setMode('mock')`。MOCK 下点切 LIVE 被拦截提示「需先登录」。设置页账号卡：已登录→「登出」；未登录→「去登录 / 注册」（置 live + 广播事件 → 落登录页）。
+> 4. **401 自动登出**：`request()` 统一收口（api/apiGet 共用）——持 token 收到 401（过期/后端换 secret）→ `logout()` 广播 → RequireAuth 重渲染落登录页；登录页自身的 401（密码错）不触发（无 token）。
+> 5. **命令面板**：已登录会话追加「账号 · 登出（用户名）」命令（演示模式无此条）。设置页新增「账号」卡（当前用户/登出/去登录）。
+> 6. **验收**（浏览器自动化三轮）：A 登录门（localStorage.clear 后显示登录页）✓；B 注册→自动登录（wb-mode=live/wb-user/wb-token 非空）✓；C 登出→登录页→演示模式→切 LIVE 拦截→设置页演示态 ✓；D 坏 token→401→自动登出→token 清空 ✓；E 回归（九视图无白屏/主题持久/GridStack 拖拽+点击检索/命令面板分组导航）✓。
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add workbench-console/src/auth workbench-console/src/api/client.js workbench-console/src/App.jsx

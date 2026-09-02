@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.6.0] - 2026-09-02
+
+### Added（M0-B4 · 前端认证入口）
+
+- `src/auth/`：`auth.js`（token/user 存取 + `wb-auth` 事件广播）、`AuthPage.jsx`（登录/注册
+  双 tab + 演示模式入口，后端英文 detail 映射中文提示）、`RequireAuth.jsx`（登录门）
+- `client.js` `request()` 统一收口（api/apiGet 共用）：注入 `Authorization: Bearer`；
+  持 token 收到 401 → 自动登出并广播 → 落登录页（登录页自身的 401 不触发）
+- 演示模式豁免：明确选择过 mock（`wb-mode==='mock'`）可免登录体验前端；全新用户先见
+  登录页（`getModeRaw()` 区分「未选择」与「明确选择」）；MOCK 下切 LIVE 被拦截提示登录
+- 设置页新增「账号」卡（当前用户/登出/去登录）；命令面板已登录时追加「登出」命令
+- 登录/注册成功自动切 LIVE 并持久会话（wb-token/wb-user/wb-mode）
+
 ## [0.5.0] - 2026-09-02
 
 ### Added（M0-B3 · 拖拽布局 + 多主题 + 命令搜索）
