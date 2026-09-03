@@ -1,0 +1,13 @@
+{
+ "id": "empty_input_error",
+ "name": "空输入 → ERROR（empty_input），trace 可归因",
+ "input": "   ",
+ "script": {},
+ "resumes": [],
+ "expect": {
+  "status": "error",
+  "output": {"error": "empty_input"},
+  "tools": [],
+  "events": ["ingest", "error"]
+ }
+}

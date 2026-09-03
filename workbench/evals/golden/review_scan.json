@@ -1,0 +1,16 @@
+{
+ "id": "review_scan",
+ "name": "复盘类输入 → 扫描决策闭环 → 只读不写",
+ "input": "复盘一下最近决策",
+ "script": {
+  "label": "复盘",
+  "review_missing": ["某决策 缺少关联问题"]
+ },
+ "resumes": [],
+ "expect": {
+  "status": "done",
+  "output": {"label": "复盘", "missing": ["某决策 缺少关联问题"]},
+  "tools": ["classify", "review", "recall"],
+  "events": ["ingest", "act", "step", "step", "step", "finish"]
+ }
+}

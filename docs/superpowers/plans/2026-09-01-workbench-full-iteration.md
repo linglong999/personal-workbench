@@ -1424,6 +1424,26 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 
 > **B3 执行记录（2026-09-02，88 test / coverage 92.00% / ruff、mypy 干净）：** 实现 ReAct 主管状态机（六状态流转）+ RulePolicy 确定性路由 + 三类 interrupt 接线 + DomainEvent 事件链；24 个测试覆盖 happy path/中断/resume/守护/事件链完整性/各标签路由。**review 抓到 1 个真 bug 并修复**：budget_seconds 计入了人机等待时间（用户思考 10 分钟后 approve 会被误判 "budget exceeded"）——守护语义是机器时间，resume 时重置计时起点；补 2 测试（budget 不计等待时间、ERROR 后重开回合——docstring 声明但未测）。另确认：`ruff format` 非项目门槛（CI 只跑 `ruff check`），存量格式漂移不动以免混批次。
 
+### M1-B4 · Trace + eval runner（逐任务 TDD）
+
+> **设计落地（兑现 M1-A 修正 A + 评测水位选项 1，2026-09-03 补写）：** `ai/trace.py`（观测层：TraceStore 落盘/回放/归因）+ `ai/eval.py`（最小 golden case runner + 坏例回流）。
+> **类型解耦（防循环依赖的关键）：** trace 只认 **dict**（JSON 形态的事件），不 import DomainEvent 类——orchestrator 运行时 import trace（save 时 asdict 转换），trace 零反向依赖；观测层连事件类都不知道，修正 A"trace 不是执行语义"在类型层面落实。
+> **存储格式：** 一 run 一 JSON 文件（`{run_id}.json` = meta + events）；run_id = `时间戳-短哈希`（文件名即排序键）。不用 SQLite：trace 是 append-only 时序记录，个人规模无需聚合查询（usage 走 SQLite 是 M4 聚合统计诉求，二者不同）。
+> **接线（修正 A 落实）：** Orchestrator 可选注入 `trace: TraceStore`，在进入 **WAITING_HUMAN / DONE / ERROR 三个观测点**时快照落盘（同 run_id 覆盖——resume 续写同文件，崩溃时保留上一稳定点）；**写 trace 失败静默不杀任务**（灵魂测试：ExplodingStore 抛 OSError，任务照常完成）。
+> **归因最小版：** `attribute_failure(events)` —— error 事件定位（reason + 出错前最后 tool + at_seq）+ 低置信步骤收集（阈值 import DecisionSkill.CONFIDENCE_THRESHOLD，不复制魔法数）。
+> **坏例回流：** `case_from_trace()` 从 trace 提取 input/script（classify 标签、decision 分析、action 草稿、review 缺失项）/resumes（interrupt 裁决序列），生成 GoldenCase——expect 从当前结果起草、人工校对为正确行为；回流产物落 `workbench/evals/golden/*.json`（一 case 一文件），`test_eval.py` 扫目录全量跑——golden case 即 CI 回归。
+
+- [x] **Step 1（红）**：`tests/test_trace.py` + `tests/test_eval.py` + `evals/golden/` 5 初始 case ——
+  1. trace：save/load roundtrip（dict 事件链 + meta）；waiting 快照 → resume 覆盖同 run_id（终态完整链）；list_runs 最新在前；重开回合新 run_id 旧文件保留；verify 好链 [] / 断链报问题；attribute_failure 定位 error 与低置信
+  2. **修正 A 灵魂测试**：ExplodingTraceStore.save 抛 OSError → 任务照常完成、笔记照常落盘、不抛异常
+  3. eval：run_case 通过/失败（failures 带原因）；judgement 双 resume 全链 case；GoldenCase JSON roundtrip；坏例回流（CaseEngine 生成 trace → case_from_trace → 重放通过=行为固化）
+  4. golden：`evals/golden/` 5 case（决策确认写入/低置信驳回/复盘扫描/澄清选实践/空输入 ERROR）扫目录全过——进 CI 回归
+- [x] **Step 2（绿）**：`ai/trace.py`（TraceStore/Trace/verify/attribute_failure）+ `ai/eval.py`（GoldenCase/CaseEngine/CaseVector/run_case/run_cases/case_from_trace/load_cases）+ orchestrator 接线（run_id 生成 + 观测点快照 + 静默容错）
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+- [x] **Step 4**：review + CHANGELOG + commit
+
+> **B4 执行记录（2026-09-03，117 test / coverage 93.61%（trace.py、eval.py 均 100%）/ ruff、mypy 干净）：** TraceStore（一 run 一 JSON）+ verify/attribute_failure + 最小 eval runner + 坏例回流（decision/review/实践/等待快照/ERROR 五类提取路径全测）。**review 三个发现均处置**：1) mypy 抓出 SkillContext 类型债（engine/vector 标注具体类，CaseEngine 结构兼容但类型不符）——改为 EngineLike/VectorLike 结构协议，"Skill 只从 ctx 拿能力"在类型层落实；2) 回流核心分支（decision analysis 提取去 needs_judgement、review_missing、related 脚本化、等待快照 expect）初测遗漏——补 7 测后两模块 100%；3) case.id 拼路径存在目录逃逸（外部 JSON 数据边界）——run_case 入口即拒。**无逻辑 bug**（B3 建立的模式直接复用）。类型解耦验证：trace 只认 dict 零反向依赖，无循环 import。
+
 ### M1 · 成功准则核对
 
 M1 完成标志：
@@ -1438,9 +1458,9 @@ M1 完成标志：
 
 - [x] action 写 Vault 前触发 confirm interrupt；decision 低置信触发 disambiguate/judgement（B2 已落 Skill 侧契约：标志/零副作用/拍板标记；interrupt 发射归 B3 主管）
 
-- [ ] 每跳产生 domain event，Trace 可回放、坏例可归因
+- [x] 每跳产生 domain event，Trace 可回放、坏例可归因
 
-- [ ] 最小 eval runner 能跑 golden case（通过/失败）；坏 Trace 可回流为回归 case
+- [x] 最小 eval runner 能跑 golden case（通过/失败）；坏 Trace 可回流为回归 case
 
 - [x] 执行守护（max\_steps/budget/human\_wait\_timeout）生效
 

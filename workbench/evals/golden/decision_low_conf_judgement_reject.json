@@ -1,0 +1,25 @@
+{
+ "id": "decision_low_conf_judgement_reject",
+ "name": "决策低置信 → judgement 拍板被驳回 → 不落库",
+ "input": "选A还是B",
+ "script": {
+  "label": "决策",
+  "analysis": {
+   "question": "选A还是B",
+   "dimensions": [],
+   "options": [],
+   "clarify": ["预算是多少？"],
+   "lean": "",
+   "confidence": 0.3
+  }
+ },
+ "resumes": [
+  {"action": "reject"}
+ ],
+ "expect": {
+  "status": "done",
+  "output": {"label": "决策", "written": false, "user_rejected": true},
+  "tools": ["classify", "decision", "recall"],
+  "events": ["ingest", "act", "step", "step", "interrupt", "resume", "step", "finish"]
+ }
+}

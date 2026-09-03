@@ -1,0 +1,29 @@
+{
+ "id": "decision_confirm_approve",
+ "name": "决策高置信 → confirm 确认 → 写入决策备忘",
+ "input": "选A还是B",
+ "script": {
+  "label": "决策",
+  "analysis": {
+   "question": "选A还是B",
+   "dimensions": ["成本", "速度"],
+   "options": [{"name": "A", "pros": "快", "cons": "糙"}],
+   "clarify": [],
+   "lean": "倾向A",
+   "confidence": 0.85
+  },
+  "draft": {
+   "title": "选A方案",
+   "content": "## 背景\n…\n## 决定\n选A\n## 关联问题\n1. 成本可控？"
+  }
+ },
+ "resumes": [
+  {"action": "approve"}
+ ],
+ "expect": {
+  "status": "done",
+  "output": {"label": "决策", "written": true},
+  "tools": ["classify", "decision", "action", "action", "recall"],
+  "events": ["ingest", "act", "step", "step", "step", "interrupt", "resume", "step", "step", "finish"]
+ }
+}

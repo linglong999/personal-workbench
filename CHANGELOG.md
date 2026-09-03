@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.12.0] - 2026-09-03
+
+### Added（M1-B4 · Trace + eval runner）
+
+- `ai/trace.py`（观测层）：TraceStore 一 run 一 JSON 文件落盘（run_id=时间戳-短哈希，文件名即排序键）+ `verify()` 链完整性校验（首事件/seq 连续/状态跳变/末观测点）+ `attribute_failure()` 最小归因（error 定位 reason+出错前 tool+at_seq；低置信步骤收集，阈值复用 DecisionSkill.CONFIDENCE_THRESHOLD）
+- `ai/eval.py`（评测水位=选项 1 最小版）：GoldenCase（脚本化引擎 CaseEngine/CaseVector，不调真 LLM）+ run_case/run_cases（每 case 独立 vault 跑真 Orchestrator，非法 resume/非法 id 报 failure 不崩）+ `case_from_trace()` 坏例回流（trace 提取 input/script/resumes，expect 从结果起草人工校对）
+- `evals/golden/` 5 初始 golden case（决策确认写入/低置信驳回/复盘扫描/澄清选实践/空输入 ERROR），`test_eval.py` 扫目录全量跑——golden case 即 CI 回归
+- orchestrator 接线：可选注入 TraceStore，进入 WAITING_HUMAN/DONE/ERROR 观测点时快照落盘（同 run_id 覆盖，崩溃保留上一稳定点）；run_id 生成
+
+### Changed（review 修正：mypy 抓出的架构债）
+
+- `SkillContext.engine/vector` 从具体类（AIEngine/VectorStore）改为结构协议（EngineLike/VectorLike）——Skill 依赖能力接口的本意落实，eval/测试的脚本化引擎可注入
+
+### 实测
+
+- 117 test 全过（+29），coverage 93.61%（trace.py、eval.py 均 100%），ruff / mypy 干净
+- 修正 A 灵魂测试：ExplodingStore 落盘抛 OSError → 任务照常完成、笔记照常落盘（观测层失败不杀任务）
+
 ## [0.11.0] - 2026-09-02
 
 ### Added（M1-B3 · ReAct 主管 + 状态机）

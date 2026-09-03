@@ -9,7 +9,9 @@
 
 import itertools
 import time
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any, Callable
 
@@ -25,6 +27,7 @@ from workbench.ai.policy import (
 )
 from workbench.ai.skills.base import SkillContext
 from workbench.ai.skills.registry import get_skill
+from workbench.ai.trace import TraceStore
 
 
 class OrchState(str, Enum):
@@ -74,6 +77,11 @@ class TurnResult:
     events: list[DomainEvent] = field(default_factory=list)
 
 
+def _new_run_id() -> str:
+    """时间戳-短哈希：文件名即排序键（TraceStore 一 run 一文件）。"""
+    return datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+
+
 class Orchestrator:
     """单回合有状态：run() 起、resume() 续；DONE/ERROR 后可 run() 重开新回合（轨迹清零）。"""
 
@@ -83,13 +91,16 @@ class Orchestrator:
         policy: Policy | None = None,
         guards: Guards | None = None,
         clock: Callable[[], float] = time.monotonic,
+        trace: TraceStore | None = None,
     ):
         self.ctx = ctx
         self.policy = policy or RulePolicy()
         self.guards = guards or Guards()
         self.clock = clock
+        self.trace = trace
         self.state = OrchState.IDLE
         self.input = ""
+        self.run_id = ""
         self.steps: list[Step] = []
         self.interrupts: list[InterruptRecord] = []
         self.events: list[DomainEvent] = []
@@ -101,6 +112,7 @@ class Orchestrator:
         if self.state not in (OrchState.IDLE, OrchState.DONE, OrchState.ERROR):
             raise RuntimeError(f"run() 非法状态: {self.state}")
         self._reset_turn()
+        self.run_id = _new_run_id()
         self.input = (text or "").strip()
         self._emit(self.state, OrchState.INGEST, "ingest", payload={"text": self.input})
         if not self.input:
@@ -234,6 +246,20 @@ class Orchestrator:
             )
         )
         self.state = to
+        # 观测点快照：进入等待/终态时落盘（修正 A：trace 是观测层，写失败不杀任务）
+        if to in (OrchState.WAITING_HUMAN, OrchState.DONE, OrchState.ERROR):
+            self._save_trace()
+
+    def _save_trace(self) -> None:
+        if self.trace is None:
+            return
+        try:
+            self.trace.save(
+                {"run_id": self.run_id, "input": self.input, "status": self.state.value.lower()},
+                [asdict(e) for e in self.events],
+            )
+        except Exception:
+            pass  # 修正 A：观测层失败静默——宁可不记，不可误杀任务
 
     def _view(self) -> RunView:
         return RunView(self.input, list(self.steps), list(self.interrupts))

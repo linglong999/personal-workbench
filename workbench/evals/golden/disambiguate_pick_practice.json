@@ -1,0 +1,22 @@
+{
+ "id": "disambiguate_pick_practice",
+ "name": "分类标签未知 → 澄清选实践 → 确认写入待办",
+ "input": "要询价",
+ "script": {
+  "label": "乱码输出",
+  "draft": {
+   "title": "联系供应商",
+   "content": "## 下一步\n询价\n## 次日跟进\n明早10点"
+  }
+ },
+ "resumes": [
+  {"action": "pick", "label": "实践"},
+  {"action": "approve"}
+ ],
+ "expect": {
+  "status": "done",
+  "output": {"label": "实践", "written": true},
+  "tools": ["classify", "action", "action", "recall"],
+  "events": ["ingest", "act", "step", "interrupt", "resume", "step", "interrupt", "resume", "step", "step", "finish"]
+ }
+}
