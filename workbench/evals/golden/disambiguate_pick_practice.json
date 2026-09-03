@@ -16,7 +16,7 @@
  "expect": {
   "status": "done",
   "output": {"label": "实践", "written": true},
-  "tools": ["classify", "action", "action", "recall"],
-  "events": ["ingest", "act", "step", "interrupt", "resume", "step", "interrupt", "resume", "step", "step", "finish"]
+  "tools": ["classify", "action", "recall", "link", "action", "recall"],
+  "events": ["ingest", "act", "step", "interrupt", "resume", "step", "step", "step", "interrupt", "resume", "step", "step", "finish"]
  }
 }

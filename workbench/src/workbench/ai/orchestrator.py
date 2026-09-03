@@ -4,7 +4,8 @@
 任一步失败/超时→ERROR；放弃/等待超时→DONE。每跳产生 domain event（修正 A：事件是执行
 语义，trace 是观测层——B4 落 TraceStore）。
 守护（计划 M1-B）：max_steps / budget_seconds / human_wait_timeout（超时按放弃→DONE）。
-主管级 interrupt 接线：action needs_confirmation→confirm；decision needs_judgement→judgement。
+M2-B1 起 interrupt 接线收编 policy（confirm/judgement/disambiguate 均由策略返回
+Interrupt 指令）：主管纯执行器，policy 是唯一"想"的场所。
 """
 
 import itertools
@@ -200,19 +201,6 @@ class Orchestrator:
                 result=sr.output,
                 confidence=sr.confidence,
             )
-            # 主管级 interrupt 接线（读 Skill 标志/输出，B2 契约的另一半）
-            if instr.skill == "action" and sr.output.get("status") == "needs_confirmation":
-                return self._wait(
-                    "confirm",
-                    {"preview": sr.output, "confidence": sr.confidence},
-                    "写库副作用 → 等待用户确认",
-                )
-            if instr.skill == "decision" and sr.output.get("needs_judgement"):
-                return self._wait(
-                    "judgement",
-                    {"analysis": sr.output},
-                    "决策低置信 → 请用户拍板",
-                )
 
     def _wait(self, kind: str, payload: dict, thought: str = "") -> TurnResult:
         self.interrupts.append(InterruptRecord(kind, payload))

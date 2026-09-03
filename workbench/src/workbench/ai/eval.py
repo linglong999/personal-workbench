@@ -45,6 +45,13 @@ class CaseEngine:
     def check_closed_loop(self, decisions: list[str]) -> list[str]:
         return list(self.script.get("review_missing", []))
 
+    def judge_link(self, title: str, content: str, candidate: dict) -> dict:
+        judges = self.script.get("judges") or {}
+        verdict = judges.get(candidate.get("title", ""))
+        if verdict:
+            return dict(verdict)
+        return {"link_to": False, "confidence": 0.0}  # 未脚本化的候选默认不链（安全默认）
+
 
 class CaseVector:
     def __init__(self, script: dict):
@@ -178,7 +185,8 @@ def case_from_trace(
 
     expect 缺省从当前结果起草（回归=固化当前行为）；坏例场景人工校对为正确行为后
     落盘 evals/golden/。script 从各 step 结果提取（decision 去 needs_judgement——
-    重放时由 Skill 按 confidence 重新推导；recall 结果进 related 供 CaseVector 复现）。
+    重放时由 Skill 按 confidence 重新推导；recall 结果进 related 供 CaseVector 复现；
+    link 的 judged 明细进 judges 供 CaseEngine 精确复现 LLM 档裁决）。
     """
     script: dict = {}
     resumes: list[dict] = []
@@ -194,6 +202,16 @@ def case_from_trace(
                 script["draft"] = {"title": result.get("title", ""), "content": result.get("content", "")}
             elif tool == "review":
                 script["review_missing"] = list(result.get("missing", []))
+            elif tool == "link":
+                judged = list(result.get("judged", []))
+                if judged:
+                    script["judges"] = {
+                        str(j.get("title", "")): {
+                            "link_to": bool(j.get("link_to", False)),
+                            "confidence": j.get("confidence", 0.0),
+                        }
+                        for j in judged
+                    }
             elif tool == "recall":
                 script["related"] = [dict(r) for r in result.get("results", [])]
         elif e.get("event") == "resume" and e.get("human_decision"):

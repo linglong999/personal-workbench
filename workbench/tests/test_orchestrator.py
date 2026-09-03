@@ -32,10 +32,12 @@ TODO_DRAFT = {"title": "联系供应商", "content": "## 下一步\n询价\n## �
 
 
 class ScriptedEngine:
-    def __init__(self, label="决策", analysis=None, draft=None):
+    def __init__(self, label="决策", analysis=None, draft=None, judge=None):
         self.label = label
         self.analysis = analysis if analysis is not None else HIGH_CONF
         self.draft = draft if draft is not None else MEMO_DRAFT
+        self.judge = judge if judge is not None else {"link_to": True, "confidence": 0.8}
+        self.judge_calls: list[str] = []
 
     def classify(self, text):
         return self.label
@@ -46,13 +48,24 @@ class ScriptedEngine:
     def draft_note(self, kind, text):
         return self.draft
 
+    def judge_link(self, title, content, candidate):
+        self.judge_calls.append(candidate.get("title", ""))
+        return dict(self.judge)
+
     def check_closed_loop(self, decisions):
         return ["某决策 缺少关联问题"]
 
 
 class FakeVector:
+    """候选池可配置（M2：link 分流测试），默认命中 auto 档。"""
+
+    def __init__(self, results=None):
+        self.results = (
+            results if results is not None else [{"id": "n1", "title": "相关经验", "score": 0.9}]
+        )
+
     def search(self, query, top_k):
-        return [{"id": "n1", "title": "相关经验", "score": 0.9}][:top_k]
+        return [dict(r) for r in self.results[:top_k]]
 
     def add(self, doc_id, title, content, path=""):
         return None  # action 确认写入的索引同步（B5 契约）：主管测试不关注索引细节
@@ -83,11 +96,11 @@ class TickClock:
         return self.t
 
 
-def make_orch(tmp_path, engine=None, guards=None, clock=None, policy=None):
+def make_orch(tmp_path, engine=None, guards=None, clock=None, policy=None, vector=None):
     ctx = SkillContext(
         engine=engine or ScriptedEngine(),
         vault=VaultStore(str(tmp_path / "vault")),
-        vector=FakeVector(),
+        vector=vector or FakeVector(),
     )
     kwargs = {}
     if guards is not None:
@@ -117,6 +130,9 @@ def test_decision_full_flow_with_confirm_and_recall(tmp_path):
     assert r1.state == OrchState.WAITING_HUMAN
     assert r1.interrupt["kind"] == "confirm"
     assert r1.interrupt["payload"]["preview"]["title"] == "选A方案"  # 预览可直接展示
+    # M2-B1：confirm payload 携带 link 决策（相关经验 0.9 命中 auto 档）
+    assert r1.interrupt["payload"]["links"] == ["相关经验"]
+    assert r1.interrupt["payload"]["pending_review"] == []
 
     r2 = orch.resume({"action": "approve"})
     assert r2.status == "done"
@@ -127,14 +143,59 @@ def test_decision_full_flow_with_confirm_and_recall(tmp_path):
 
     notes = memo_notes(tmp_path)
     assert len(notes) == 1  # 草稿不落盘 + 确认后写一次 = 恰好 1 张
-    assert "关联问题" in notes[0].read_text(encoding="utf-8")
+    body = notes[0].read_text(encoding="utf-8")
+    assert "关联问题" in body
+    assert "[[相关经验]]" in body  # 确认后写入：auto 档双链渲染进「## 关联」
 
     names = [e.event for e in orch.events]
     assert names == [
-        "ingest", "act", "step", "step", "step", "interrupt", "resume", "step", "step", "finish",
+        "ingest", "act", "step", "step", "step", "step", "step",
+        "interrupt", "resume", "step", "step", "finish",
     ]
     tools = [e.tool for e in orch.events if e.event == "step"]
-    assert tools == ["classify", "decision", "action", "action", "recall"]
+    # M2-B1 编排：action 草稿 → recall 候选 → link 决策 → confirm → action(confirmed, links) → recall 收尾
+    assert tools == ["classify", "decision", "action", "recall", "link", "action", "recall"]
+
+
+def test_confirm_payload_carries_pending_review(tmp_path):
+    """低分候选不自动链，透出给用户裁决（<0.75 档）。"""
+    vector = FakeVector(
+        results=[
+            {"id": "n1", "title": "相关经验", "score": 0.9},
+            {"id": "n2", "title": "弱相关参考", "score": 0.6},
+        ]
+    )
+    orch = make_orch(tmp_path, vector=vector)
+    r1 = orch.run("选A还是B")
+    payload = r1.interrupt["payload"]
+    assert payload["links"] == ["相关经验"]  # auto 档
+    assert payload["pending_review"] == [{"title": "弱相关参考", "score": 0.6}]  # 低分档
+    r2 = orch.resume({"action": "approve"})
+    assert r2.output["written"] is True
+    body = memo_notes(tmp_path)[0].read_text(encoding="utf-8")
+    assert "[[相关经验]]" in body
+    assert "[[弱相关参考]]" not in body  # 低分候选未经用户裁决不落链
+
+
+def test_llm_tier_candidate_linked_via_engine(tmp_path):
+    """0.75~0.85 档走 LLM 判断：judge 通过则链、驳回则不链。"""
+    vector = FakeVector(results=[{"id": "c1", "title": "成本考量", "score": 0.8}])
+    orch = make_orch(tmp_path, vector=vector)  # ScriptedEngine.judge 默认 link_to=True
+    r1 = orch.run("选A还是B")
+    assert r1.interrupt["payload"]["links"] == ["成本考量"]
+    orch.resume({"action": "approve"})
+
+    vector2 = FakeVector(results=[{"id": "c1", "title": "成本考量", "score": 0.8}])
+    engine = ScriptedEngine(judge={"link_to": False, "confidence": 0.7})
+    orch2 = make_orch(tmp_path, engine=engine, vector=vector2)
+    r = orch2.run("选A还是B")
+    assert r.interrupt["payload"]["links"] == []  # LLM 驳回 → 不链
+    orch2.resume({"action": "approve"})
+
+    bodies = [n.read_text(encoding="utf-8") for n in memo_notes(tmp_path)]
+    assert len(bodies) == 2
+    assert any("[[成本考量]]" in b for b in bodies)  # judge 通过的那张已链
+    assert any("[[成本考量]]" not in b for b in bodies)  # judge 驳回的那张未链
 
 
 # ═══════════ 三类 interrupt ═══════════

@@ -76,8 +76,11 @@ class Policy(Protocol):
 
 
 class RulePolicy:
-    """M1 确定性路由：分类 → 按标签走价值环节 → recall 收尾。
+    """M1 确定性路由 + M2 双链管线：分类 → 按标签走价值环节 → recall 收尾。
 
+    M2-B1 起 interrupt 全部由 policy 发出（orchestrator 纯执行器，policy 是唯一
+    "想"的场所）：decision 低置信 → judgement；action 草稿 → recall 候选 → link
+    分流 → confirm（payload 携带 links/pending_review）。
     resume 安全默认：confirm/judgement 的裁决非 approve 一律不触发写库（宁可不写，不可误写）。
     """
 
@@ -111,7 +114,13 @@ class RulePolicy:
             return RunSkill("decision", {"text": run.input}, thought="决策类输入 → 结构化分析")
         if d.result.get("needs_judgement"):
             res = run.resolution("judgement")
-            if not (res and res.get("action") == "approve"):
+            if res is None:
+                return Interrupt(
+                    "judgement",
+                    {"analysis": d.result},
+                    thought="决策低置信 → 请用户拍板",
+                )
+            if res.get("action") != "approve":
                 return self._finish(
                     run,
                     {"label": "决策", "decision": d.result, "written": False, "user_rejected": True},
@@ -124,17 +133,48 @@ class RulePolicy:
             return RunSkill("action", {"kind": kind, "text": run.input}, thought=f"label={label} → 起草{kind}")
         out = a.result
         if out.get("status") == "needs_confirmation":
-            res = run.resolution("confirm")
-            if res and res.get("action") == "approve":
-                return RunSkill(
-                    "action",
-                    {"kind": kind, "text": run.input, "confirmed": True},
-                    thought="已确认 → 写入 Vault",
-                )
-            return self._finish(
-                run, {"label": label, "written": False, "user_rejected": True}
-            )
+            return self._confirm_pipeline(run, out, kind, label)
         return self._finish(run, {"label": label, "written": True, "path": out.get("path", "")})
+
+    def _confirm_pipeline(self, run: RunView, out: dict, kind: str, label: str) -> Instruction:
+        """M2 双链管线：action 草稿 → recall 候选 → link 分流 → confirm → 写入。"""
+        res = run.resolution("confirm")
+        if res is None:
+            rec = self._latest_recall(run, finish=False)
+            if rec is None:
+                query = f"{out.get('title', '')}\n{out.get('content', '')}"
+                return RunSkill(
+                    "recall", {"task": query, "top_k": 20}, thought="草稿就绪 → 召回关联候选"
+                )
+            link = run.latest_step("link")
+            if link is None:
+                return RunSkill(
+                    "link",
+                    {
+                        "title": out.get("title", ""),
+                        "content": out.get("content", ""),
+                        "candidates": rec.result.get("results", []),
+                    },
+                    thought="候选就绪 → 三档分流定双链",
+                )
+            return Interrupt(
+                "confirm",
+                {
+                    "preview": out,
+                    "links": link.result.get("links", []),
+                    "pending_review": link.result.get("pending_review", []),
+                },
+                thought="写库副作用 → 等待用户确认（附建议双链）",
+            )
+        if res.get("action") == "approve":
+            link = run.latest_step("link")
+            links = link.result.get("links", []) if link else []
+            return RunSkill(
+                "action",
+                {"kind": kind, "text": run.input, "confirmed": True, "links": links},
+                thought="已确认 → 写入 Vault（含双链）",
+            )
+        return self._finish(run, {"label": label, "written": False, "user_rejected": True})
 
     def _review_flow(self, run: RunView) -> Instruction:
         r = run.latest_step("review")
@@ -144,9 +184,21 @@ class RulePolicy:
 
     def _finish(self, run: RunView, output: dict) -> Instruction:
         """收尾前先 recall：把相关历史经验附在最终输出（"带着经验回来"）。"""
-        rec = run.latest_step("recall")
+        rec = self._latest_recall(run, finish=True)
         if rec is None:
-            return RunSkill("recall", {"task": run.input, "top_k": 3}, thought="收尾：召回相关历史经验")
+            return RunSkill(
+                "recall",
+                {"task": run.input, "top_k": 3, "finish": True},
+                thought="收尾：召回相关历史经验",
+            )
         return Finish(
             {**output, "related": rec.result.get("results", [])}, thought="完成"
         )
+
+    @staticmethod
+    def _latest_recall(run: RunView, finish: bool) -> Step | None:
+        """按用途找 recall：候选召回（confirm 管线前置）与收尾召回（finish 标志）互不串档。"""
+        for s in reversed(run.steps):
+            if s.skill == "recall" and bool(s.args.get("finish")) == finish:
+                return s
+        return None

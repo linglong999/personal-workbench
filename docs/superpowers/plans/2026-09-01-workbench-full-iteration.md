@@ -1527,21 +1527,60 @@ M1 完成标志：
 
 > 补充：本项目的 `_LocalEmbeddingFunction` 是本地哈希词袋（无网络、无模型下载），embedding 缓存对其意义不大；真正需的是"hash 判断内容是否变化"的增量索引，避免频繁写入时反复重扫全网。
 
+### M2 执行分批（2026-09-03 补写）
+
+M2 体量约为 M1 一半，分 2 批执行（前端接入按用户拍板攒到 M4）：
+
+| 批次 | 范围 | 关键产出 |
+| --- | --- | --- |
+| **M2-B1** | 双链管线 | link Skill（三档阈值分流）+ engine.judge\_link + action 接收 links 写入 + 主管编排 + vector.search 补 score |
+| **M2-B2** | hash 增量索引 | knowledge/indexer.py（content\_hash + sync\_vault 增量同步）+ 写卡路径带 hash + /api/sync\_vault 端点 |
+
+### M2-B1 · 写卡自动双链管线（逐任务 TDD）
+
+> **设计落地（2026-09-03 补写）：**
+> **link 是第 6 个 Skill（不是 policy 内部函数）：** 决策 3"该链到谁由主管编排"落在 policy 的路由顺序上（action 草稿 → recall 候选 → link 决策 → confirm → 写入），但 link 决策本身 Skill 化——天然拿 ctx.engine（LLM 边缘判断）、steps 里有记录（trace/eval 可回放）、不破坏 policy 纯函数性。
+> **主管级 interrupt 接线挪进 policy：** M2 后草稿 action 的 needs\_confirmation 不再立即触发 confirm（要先 recall+link），orchestrator 的硬编码接线（action/decision 两处）删除，全部由 policy 返回 Interrupt 指令——orchestrator 变纯执行器，policy 是唯一"想"的场所（B3 接线职责没变，位置归位）。
+> **vector.search 补 score：** Chroma cosine 距离 → score = 1 - distance；响应加字段向后兼容（前端不读即忽略）。
+> **三档语义（对齐 M2-A 管线）：** score≥0.85 auto（直接链，零 LLM）；0.75~0.85 喂 LLM（judge\_link 返回 {link\_to, confidence}，**非法 JSON/残缺默认不链**——宁可不链不可误链）；<0.75 pending\_review（不自动链，confirm 时透出给用户）。去重（同标题留最高分）+ 排除草稿正文已有的人工 [[链]]（尊重显式边）。
+> **action 写入规范扩展：** args 增 `links`（auto 档标题列表）；写入时正文追加「## 关联」节渲染 `[[标题]]`；正文已有人工链不重复；无 links 不加节。confirm interrupt payload 扩为 {preview, links, pending\_review}。
+> **编排后序列（决策流）：** classify → decision → action 草稿 → recall(top\_k=20) → link → [confirm] → approve → action(confirmed, links) → recall(收尾)。存量 golden case / orchestrator 测试的 tools 序列全部更新（预期内行为变更）。
+
+- [x] **Step 1（红）**：`tests/test_skills.py`（link 三档/去重/人工链排除/judge\_link 边界；action links 渲染/无 links 不加节/人工链去重；注册表 6）+ `tests/test_ai.py`（engine.judge\_link JSON 三态：合法/非法→不链/残缺→默认）+ `tests/test_vector.py`（search 返回 score）+ `tests/test_orchestrator.py`（新序列 + confirm payload 含 links + 驳回不写不变）+ `evals/golden/` 5 case 序列更新 ——
+  1. link：三档分流（0.9→auto 零 LLM；0.8→走 judge\_link，approve→链 / reject→不链；0.6→pending\_review）；同标题去重留最高分；草稿已有 [[X]] 则 X 排除
+  2. action：links=[A,B] → 正文含「## 关联」+ [[A]] + [[B]]；正文已有 [[A]] → A 不重复；links 空/缺 → 无关联节
+  3. 编排：决策 happy path 全链序列（含 recall+link）；confirm payload 带 links/pending\_review；驳回仍零写入；judgement 双 interrupt 串行流
+  4. eval：golden 序列更新后全过；回流 case（case\_from\_trace）重放通过
+- [x] **Step 2（绿）**：`ai/skills/link.py` + `engine.py`（judge\_link）+ `action.py`（links 渲染）+ `policy.py`（路由 + Interrupt 收编）+ `orchestrator.py`（删硬编码接线）+ `vector.py`（score）+ registry/CaseEngine/回流适配
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+- [x] **Step 4**：review + CHANGELOG + commit
+
+> **M2-B1 执行记录（2026-09-03）：** 145 test 全过（+22），coverage 93.96%（link.py / policy.py 100%），ruff / mypy 干净。review 发现并修复 2 处缺陷：① vector.search 距离缺失兜底原为 0.0（→score=1.0 会误进 auto 档自动建链），改兜底最大距离并补回归测试；② engine.judge\_link 喂料与 M2-A 设计不符（原喂全文且不带 score），改 200 字截断摘要 + score 进 prompt 并补 PromptCapture 回归测试。存量断言修正两处：test\_skills「## 关联」改行级正则（区分「## 关联问题」契约节）；test\_vector score 绝对值断言改相对排序（本地哈希 embedding 量纲低于语义模型，不绑量纲）。
+
+### M2-B2 · hash 增量索引（逐任务 TDD）
+
+> **设计落地（2026-09-03 补写）：** `knowledge/indexer.py`——content\_hash（sha256）存 Chroma metadata；`sync_vault(vault, vector)` 扫 Vault 白名单目录，hash 命中跳过 / 变更重算 / 新增入库（upsert 语义，**不处理删除**——最小版，删除卡留全量重建）；写卡路径（action / create\_note 端点 / MCP）add 时带 content\_hash。bridge `POST /api/sync_vault`（鉴权）供首次初始化与手动重建。SyncReport{added, updated, skipped} 可观测。
+
+- [ ] **Step 1（红）**：`tests/test_indexer.py`——首次 sync 全量入库；二跑全 skipped（hash 命中零重算）；改一张卡只 updated 该卡；新增卡 added；写卡路径 metadata 带 content\_hash
+- [ ] **Step 2（绿）**：`knowledge/indexer.py` + vector.add 带 hash + 三入口接线 + bridge 端点
+- [ ] **Step 3**：全量验证
+- [ ] **Step 4**：review + CHANGELOG + commit
+
 ### M2 · 成功准则核对
 
 M2 完成标志：
 
-- [ ] action 写卡流程接入了"M1 recall 召回候选 → 阈值/LLM 决策 → 带双链写入"的管线
+- [x] action 写卡流程接入了"M1 recall 召回候选 → 阈值/LLM 决策 → 带双链写入"的管线
 
-- [ ] 高置信(≥0.85)新卡自动生成 `[[链接]]`，不消耗 LLM
+- [x] 高置信(≥0.85)新卡自动生成 `[[链接]]`，不消耗 LLM
 
-- [ ] 边缘(0.75\~0.85)仅喂 LLM 标题+摘要+score，返回结构化 JSON
+- [x] 边缘(0.75\~0.85)仅喂 LLM 标题+摘要+score，返回结构化 JSON
 
-- [ ] 低置信(<0.75)不自动链，标记待人工
+- [x] 低置信(<0.75)不自动链，标记待人工
 
 - [ ] hash 增量索引：改一张卡只重算该卡，不全文重扫
 
-- [ ] Obsidian 已有人工双链被尊重（显式边），AI 相似边为其补充（隐式边），合成一张网
+- [x] Obsidian 已有人工双链被尊重（显式边），AI 相似边为其补充（隐式边），合成一张网
 
 - [ ] 写卡/改卡重复操作不重复计算 embedding（hash 命中即复用）
 

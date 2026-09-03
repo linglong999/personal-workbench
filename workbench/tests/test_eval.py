@@ -43,7 +43,8 @@ def happy_case():
         expect={
             "status": "done",
             "output": {"label": "决策", "written": True},
-            "tools": ["classify", "decision", "action", "action", "recall"],
+            # M2-B1：草稿 → recall 候选 → link → confirm → 写入 → recall 收尾
+            "tools": ["classify", "decision", "action", "recall", "link", "action", "recall"],
         },
     )
 
@@ -226,6 +227,33 @@ def test_case_from_trace_review_extraction(tmp_path):
     assert case.script["review_missing"] == ["孤决策 缺少关联问题"]
     assert case.script["related"][0]["title"] == "相关经验"  # recall 结果也脚本化
     assert run_case(case, tmp_path / "replay").passed
+
+
+def test_case_from_trace_extracts_judges(tmp_path):
+    """M2-B1：LLM 档判断回流——judged 明细提取为 script.judges，重放精确复现。"""
+    script = {
+        "label": "决策",
+        "analysis": HIGH_CONF,
+        "draft": MEMO_DRAFT,
+        "related": [{"id": "c1", "title": "成本考量", "content": "各方案成本", "score": 0.8}],
+        "judges": {"成本考量": {"link_to": True, "confidence": 0.8}},
+    }
+    ctx = SkillContext(
+        CaseEngine(script), VaultStore(str(tmp_path / "vault")), CaseVector(script)
+    )
+    store = TraceStore(tmp_path / "traces")
+    orch = Orchestrator(ctx, trace=store)
+    r1 = orch.run("选A还是B")
+    assert r1.interrupt["payload"]["links"] == ["成本考量"]  # 0.8 → LLM 档 → judge 通过
+    orch.resume({"action": "approve"})
+
+    case = case_from_trace(store.load(orch.run_id), case_id="reflow_judged")
+    assert case.script["judges"]["成本考量"] == {"link_to": True, "confidence": 0.8}
+    replay = run_case(case, tmp_path / "replay")
+    assert replay.passed, replay.failures
+    # 重放写入的卡同样带 judge 通过的双链（行为固化）
+    notes = list((tmp_path / "replay" / "case-reflow_judged" / "vault" / "决策备忘").glob("*.md"))
+    assert "[[成本考量]]" in notes[0].read_text(encoding="utf-8")
 
 
 def test_case_from_trace_waiting_snapshot(tmp_path):

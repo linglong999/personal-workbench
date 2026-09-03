@@ -74,8 +74,18 @@ class VectorStore:
         docs = (res.get("documents") or [[]])[0] or []
         ids = (res.get("ids") or [[]])[0] or []
         metas = (res.get("metadatas") or [[]])[0] or []
+        dists = (res.get("distances") or [[]])[0] or []
         metas = metas or [{}] * len(ids)
+        # 距离缺失（API 异常）兜底最大距离 → score=0 最低档：宁可不链，不可误链
+        dists = dists or [1.0] * len(ids)
         return [
-            {"id": i, "title": m.get("title", ""), "content": d, "path": m.get("path", "")}
-            for i, d, m in zip(ids, docs, metas)
+            {
+                "id": i,
+                "title": m.get("title", ""),
+                "content": d,
+                "path": m.get("path", ""),
+                # cosine 距离 → 相似度分：link 三档分流（M2-B1）的判档依据
+                "score": 1.0 - dist,
+            }
+            for i, d, m, dist in zip(ids, docs, metas, dists)
         ]

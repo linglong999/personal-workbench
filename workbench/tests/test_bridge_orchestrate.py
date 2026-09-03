@@ -70,6 +70,9 @@ def test_orchestrate_happy_confirm_then_approve(tmp_path, monkeypatch):
     assert body["run_id"]
     assert body["interrupt"]["kind"] == "confirm"
     assert body["interrupt"]["payload"]["preview"]["title"] == "选A方案"  # 预览可直接展示
+    # M2-B1：link 决策随 confirm payload 透出（相关经验 0.9 命中 auto 档）
+    assert body["interrupt"]["payload"]["links"] == ["相关经验"]
+    assert body["interrupt"]["payload"]["pending_review"] == []
     assert [e["event"] for e in body["events"]][-1] == "interrupt"  # 事件链随响应透出
 
     r2 = client.post(
@@ -87,7 +90,9 @@ def test_orchestrate_happy_confirm_then_approve(tmp_path, monkeypatch):
 
     notes = list((tmp_path / "vault" / "决策备忘").glob("*.md"))
     assert len(notes) == 1  # 草稿不落盘 + 确认后写一次
-    assert "关联问题" in notes[0].read_text(encoding="utf-8")
+    body_text = notes[0].read_text(encoding="utf-8")
+    assert "关联问题" in body_text
+    assert "[[相关经验]]" in body_text  # M2-B1：确认写入的卡带自动双链
 
 
 def test_orchestrate_trace_persisted(tmp_path, monkeypatch):

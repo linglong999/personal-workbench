@@ -67,6 +67,36 @@ class AIEngine:
                 problems.append(f"{d} 缺少关联问题")
         return problems
 
+    def judge_link(self, title: str, content: str, candidate: dict) -> dict:
+        """知识层：判断新卡与既有候选卡是否值得建立双链。返回 {link_to, confidence}。
+
+        喂料边界（M2-A）：仅 标题+摘要（200 字截断）+score——长文不放大 token，
+        且近全卡会误判同名词卡。安全默认（M2-B1）：非法 JSON / 非 dict /
+        link_to 非 bool 一律不链——宁可不链，不可误链。
+        """
+        system = (
+            "你是知识关联判断助手，服务于个人知识库的双链建设。判断新笔记与既有笔记是否值得"
+            "建立双向链接（同一主题、直接因果、同一事项的后续）。"
+            '只输出 JSON：{"link_to": true/false, "confidence": 0.0到1.0}。'
+            "只有明确相关才给 true；不确定或仅字面相似给 false。"
+        )
+        cand = (
+            f"标题：{candidate.get('title', '')}\n"
+            f"摘要：{str(candidate.get('content', ''))[:200]}\n"
+            f"相似度：{candidate.get('score', 0.0)}"
+        )
+        raw = self.llm.complete(
+            system, f"新笔记标题：{title}\n新笔记摘要：\n{content[:200]}\n\n候选笔记：\n{cand}"
+        )
+        defaults: dict = {"link_to": False, "confidence": 0.0}
+        data = self._parse_json(raw)
+        if data is None:
+            return defaults
+        merged = {**defaults, **data}
+        if not isinstance(merged["link_to"], bool):
+            return {**merged, "link_to": False}
+        return merged
+
     def _parse_json(self, raw: str) -> dict | None:
         """LLM 边界：非法 JSON / 非 dict 一律返回 None，由调用方按各自默认值兜底。"""
         try:

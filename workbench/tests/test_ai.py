@@ -100,3 +100,57 @@ def test_check_closed_loop_rules():
     engine = AIEngine(FakeLLM())
     problems = engine.check_closed_loop(["含关联问题的备忘", "孤决策"])
     assert problems == ["孤决策 缺少关联问题"]
+
+
+# ═══════════ M2-B1 · engine.judge_link（关联判断，JSON 边界三态）═══════════
+
+JUDGE_CANDIDATE = {"id": "c1", "title": "成本考量", "content": "各方案成本对比", "score": 0.8}
+
+
+def test_judge_link_parses_json():
+    engine = AIEngine(StubLLM(json.dumps({"link_to": True, "confidence": 0.8})))
+    verdict = engine.judge_link("选 A 方案", "## 决定\n选 A", JUDGE_CANDIDATE)
+    assert verdict == {"link_to": True, "confidence": 0.8}
+
+
+def test_judge_link_bad_json_defaults_no_link():
+    engine = AIEngine(StubLLM("模型抽风了，不是 JSON"))
+    verdict = engine.judge_link("选 A 方案", "## 决定\n选 A", JUDGE_CANDIDATE)
+    assert verdict["link_to"] is False
+    assert verdict["confidence"] == 0.0
+
+
+def test_judge_link_missing_field_defaults_no_link():
+    engine = AIEngine(StubLLM('{"confidence": 0.9}'))  # 残缺：缺 link_to
+    verdict = engine.judge_link("选 A 方案", "## 决定\n选 A", JUDGE_CANDIDATE)
+    assert verdict["link_to"] is False
+
+
+def test_judge_link_non_bool_link_to_defaults_no_link():
+    engine = AIEngine(StubLLM('{"link_to": "yes", "confidence": 0.9}'))  # 类型残缺
+    verdict = engine.judge_link("选 A 方案", "## 决定\n选 A", JUDGE_CANDIDATE)
+    assert verdict["link_to"] is False  # 宁可不链，不可误链
+
+
+class PromptCaptureLLM:
+    """记录 user prompt——断言 judge_link 的喂料边界（标题+摘要+score，不喂全文）。"""
+
+    def __init__(self, response):
+        self.response = response
+        self.user = ""
+
+    def complete(self, system, user):
+        self.user = user
+        return self.response
+
+
+def test_judge_link_feeds_bounded_summary_not_full_text():
+    """M2-A 管线（review 补）：边缘档仅喂 标题+摘要(200字截断)+score——
+    成本上界（长文不放大 token）+ 近全卡会误判同名词卡（业界核实）。"""
+    llm = PromptCaptureLLM('{"link_to": false, "confidence": 0.5}')
+    engine = AIEngine(llm)
+    engine.judge_link("选 A 方案", "很" * 600, {"title": "成本考量", "content": "贵" * 600, "score": 0.8})
+    assert "选 A 方案" in llm.user  # 标题进 prompt
+    assert "0.8" in llm.user  # score 进 prompt 供 LLM 校准
+    assert "很" * 201 not in llm.user  # 新笔记全文不进 prompt（截断为摘要）
+    assert "贵" * 201 not in llm.user  # 候选全文不进 prompt

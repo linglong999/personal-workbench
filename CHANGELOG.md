@@ -2,6 +2,32 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.14.0] - 2026-09-03
+
+### Added（M2-B1 · 写卡自动双链管线）
+
+- `ai/skills/link.py`（第 6 个 Skill，知识层）：三档阈值分流——score≥0.85 auto（零 LLM 直接链）/ 0.75~0.85 走 `engine.judge_link`（LLM 边缘判断）/ <0.75 pending_review（透出给用户裁决）；同标题去重留最高分 + 排除草稿正文已有的人工 `[[链]]`（尊重显式边）；judged 明细进 result（trace 可回放、坏例回流可精确复现）
+- `engine.judge_link`：关联判断 prompt + JSON 边界三态兜底（非法 JSON / 残缺 / link_to 非 bool 一律不链——宁可不链，不可误链）
+- `action` Skill 写入规范扩展：args.links 渲染为「## 关联」节（正文人工链不重复、args 内去重、无新链不加节）；索引与落盘用同一份渲染后正文
+- `vector.search` 补 `score`（1 - cosine 距离），响应加字段向后兼容
+- confirm interrupt payload 扩为 {preview, links, pending_review}：建议双链随确认透出
+
+### Changed（interrupt 接线收编 policy）
+
+- **orchestrator 纯执行器化**：action/decision 两处硬编码 interrupt 接线删除，confirm/judgement/disambiguate 全部由 policy 返回 Interrupt 指令——policy 是唯一"想"的场所（B3 接线职责不变，位置归位）
+- 编排后序列（决策流）：classify → decision → action 草稿 → recall(top_k=20) → link → [confirm] → approve → action(confirmed, links) → recall 收尾；`_latest_recall` 按 finish 标志区分候选召回与收尾召回，互不串档
+- golden case 2 个序列更新（decision_confirm_approve / disambiguate_pick_practice），回归=固化新编排
+- `case_from_trace` 提取 link judged 明细进 script.judges，CaseEngine 重放可精确复现 LLM 档裁决（未脚本化候选默认不链）
+
+### Fixed（review 抓到的两处缺陷）
+
+- `vector.search` 距离缺失（API 异常形态）兜底原为 0.0 → score=1.0 会把异常结果顶进 auto 档自动建链；改兜底最大距离（score=0 最低档），补 monkeypatch 回归测试
+- `engine.judge_link` 喂料与 M2-A 设计不符：原喂新卡+候选**全文**且不带 score，设计要求"仅标题+摘要+score"（成本上界 + 近全卡误判同名词卡）；改 200 字截断摘要 + score 进 prompt，补 PromptCapture 回归测试
+
+### 实测
+
+- 145 test 全过（+22），coverage 93.96%（link.py、policy.py 均 100%），ruff / mypy 干净（29 源文件）
+
 ## [0.13.0] - 2026-09-03
 
 ### Added（M1-B5 · Bridge 接线收口）
