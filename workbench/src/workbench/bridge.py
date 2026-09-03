@@ -1,8 +1,10 @@
-"""HTTP Bridge：把 workbench 的 5 个 MCP 工具暴露给前端 Console（LIVE 模式）。
+"""HTTP Bridge：把 workbench 的能力暴露给前端 Console（LIVE 模式）。
 
 浏览器无法直连 MCP（stdio 协议），本模块以 FastAPI 提供同构的 HTTP 端点：
-端点与 mcp_server.create_server 中的 5 个工具一一对应，业务逻辑完全复用
-同一套组件（vault / vector / classifier / reviewer / coach），不改后端本身。
+- 5 个 Skill 端点与 mcp_server.create_server 中的工具一一对应（agents.py 已退役，
+  classify/scan/reopen 走 Skill 注册表，响应契约不变）
+- M1-B5 主管入口：POST /api/orchestrate（新回合）+ /api/orchestrate/resume（续回合），
+  会话注册表按 run_id 持有 Orchestrator，终态即删；TraceStore 落 .data/traces
 
 启动（cwd=workbench）：
     set PYTHONPATH=src
@@ -13,7 +15,9 @@
 
 import json
 import os
+import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote
 
@@ -23,9 +27,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from workbench import usage
-from workbench.ai.agents import ClassifierAgent, CoachAgent, ReviewerAgent
 from workbench.ai.engine import AIEngine
 from workbench.ai.llm import LLMClient
+from workbench.ai.orchestrator import Orchestrator, OrchState, TurnResult
+from workbench.ai.skills.base import SkillContext
+from workbench.ai.skills.registry import get_skill
+from workbench.ai.trace import TraceStore
 from workbench.auth.service import AuthService
 from workbench.config import load_config
 from workbench.knowledge.vault import VaultStore
@@ -42,9 +49,8 @@ llm = LLMClient(
 engine = AIEngine(llm)
 vector = VectorStore(cfg.chroma_dir)
 vault = VaultStore(cfg.vault_path)
-classifier = ClassifierAgent(engine)
-reviewer = ReviewerAgent(engine)
-coach = CoachAgent(engine, vector)
+skill_ctx = SkillContext(engine, vault, vector)
+trace_store = TraceStore(".data/traces")
 
 # JWT secret：优先复用 LLM key（本地单用户）；无 key 用固定开发 secret（仅本地自用形态，
 # 见 ADR-0001 D2/D3）。短 key（<32B，如 CI 的 sk-test）拼接补足，避免 InsecureKeyLengthWarning。
@@ -221,20 +227,87 @@ def api_create_note(req: NoteReq, _: dict = Depends(require_auth)):
 
 @app.post("/api/classify_text")
 def api_classify(req: TextReq, _: dict = Depends(require_auth)):
-    """对应 MCP 工具 classify_text（真实 LLM 分类）。"""
-    return {"label": classifier.classify(req.text)}
+    """对应 MCP 工具 classify_text（Skill 注册表派发，响应契约不变）。"""
+    return {"label": get_skill("classify").run(skill_ctx, {"text": req.text}).output["label"]}
 
 
 @app.post("/api/scan_decision_closed_loop")
 def api_scan(_: dict = Depends(require_auth)):
-    """对应 MCP 工具 scan_decision_closed_loop。"""
-    return {"missing": reviewer.scan_closed_loop(vault)}
+    """对应 MCP 工具 scan_decision_closed_loop（Skill 注册表派发，响应契约不变）。"""
+    return {"missing": get_skill("review").run(skill_ctx, {}).output["missing"]}
 
 
 @app.post("/api/reopen_task")
 def api_reopen(req: TaskReq, _: dict = Depends(require_auth)):
-    """对应 MCP 工具 reopen_task（Coach 递送历史经验）。"""
-    return {"results": coach.recall_for_task(req.task, req.top_k)}
+    """对应 MCP 工具 reopen_task（recall Skill 递送历史经验，响应契约不变）。"""
+    return {
+        "results": get_skill("recall")
+        .run(skill_ctx, {"task": req.task, "top_k": req.top_k})
+        .output["results"]
+    }
+
+
+# ── M1-B5 主管入口：有状态回合 × 无状态 HTTP ──
+
+class OrchestrateReq(BaseModel):
+    text: str
+
+
+class OrchestrateResumeReq(BaseModel):
+    run_id: str
+    decision: dict
+
+
+_sessions: dict[str, Orchestrator] = {}
+_SESSIONS_CAP = 50  # 防放弃等待的会话泄漏：超上限最旧先出（单用户本地足够）
+# FastAPI 同步 handler 跑线程池：双击 approve 的并发 resume 若不加锁，
+# 第二个请求会撞「resume() 非法状态」RuntimeError → 500；并发 prune 还会重复删 key
+_sessions_lock = threading.Lock()
+
+
+def _prune_sessions() -> None:
+    """终态会话即删：不可 resume（HTTP 侧因此永不撞 RuntimeError），且不占内存。"""
+    for rid in [k for k, o in _sessions.items() if o.state in (OrchState.DONE, OrchState.ERROR)]:
+        del _sessions[rid]
+    while len(_sessions) > _SESSIONS_CAP:
+        _sessions.pop(next(iter(_sessions)))
+
+
+def _turn_response(orch: Orchestrator, result: TurnResult) -> dict:
+    return {
+        "run_id": orch.run_id,
+        "status": result.status,
+        "state": result.state.value,
+        "output": result.output,
+        "interrupt": result.interrupt,
+        "events": [asdict(e) for e in result.events],
+    }
+
+
+@app.post("/api/orchestrate")
+def api_orchestrate(req: OrchestrateReq, _: dict = Depends(require_auth)):
+    """主管入口：{text} 起新回合。回合错误（如空输入）是数据（200 + status=error）。"""
+    orch = Orchestrator(skill_ctx, trace=trace_store)
+    result = orch.run(req.text)  # 新回合未共享，run 无需持锁
+    with _sessions_lock:
+        _sessions[orch.run_id] = orch
+        _prune_sessions()
+    return _turn_response(orch, result)
+
+
+@app.post("/api/orchestrate/resume")
+def api_orchestrate_resume(req: OrchestrateResumeReq, _: dict = Depends(require_auth)):
+    """续回合：{run_id, decision}。等待中的会话才在注册表里，未知/已终态 → 404。
+
+    查表 + resume + prune 整体持锁：串行化同一会话的并发裁决（后到者 404），
+    而不是撞状态机异常。"""
+    with _sessions_lock:
+        orch = _sessions.get(req.run_id)
+        if orch is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        result = orch.resume(req.decision)
+        _prune_sessions()
+    return _turn_response(orch, result)
 
 
 class AuthReq(BaseModel):

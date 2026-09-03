@@ -4,6 +4,8 @@ confirm 语义（B3 主管接线）：主管见 requires_confirmation=True 先�
 interrupt 把预览递给人；用户确认后才带 confirmed=True 调 run。未确认时本 Skill
 零副作用（幂等），预览已含起草内容供 interrupt 展示。
 kind→folder 显式映射：待办落「行动记录」（Vault 白名单目录，六层框架的实践层）。
+写入即索引（B5 契约）：确认写入后同步向量库——recall 才能召回 agent 写的卡，
+与 create_note 端点的「写后立即可检索」契约一致（所有入口一致）。
 """
 
 from workbench.ai.skills.base import SkillContext, SkillResult
@@ -26,6 +28,7 @@ class ActionSkill:
                 output={"status": "needs_confirmation", "kind": kind, **draft}
             )
         path = ctx.vault.create_note(KIND_FOLDERS[kind], draft["title"], draft["content"])
+        ctx.vector.add(f"note-{path.stem}", draft["title"], draft["content"], path=str(path))
         return SkillResult(
             output={"status": "written", "kind": kind, "path": str(path)}
         )

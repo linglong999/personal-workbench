@@ -2,6 +2,26 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.13.0] - 2026-09-03
+
+### Added（M1-B5 · Bridge 接线收口）
+
+- `POST /api/orchestrate`（{text} 起新回合）+ `POST /api/orchestrate/resume`（{run_id, decision} 续回合）：会话注册表按 run_id 持有 Orchestrator，**终态即删**（resume 未知/已终态 → 404）+ cap 50 最旧先出；响应透出 run_id/status/state/output/interrupt/events 全链（事件链即前端可渲染的观测数据）；回合错误（空输入等）是数据（200 + status=error），不是传输错误
+- TraceStore 接线：bridge 落 `.data/traces`（gitignore），主管每回合的观测点快照直接可回放/归因
+
+### Changed
+
+- **agents.py 退役（M1 角色迁移收口）**：bridge 三端点（classify_text / scan_decision_closed_loop / reopen_task）改走 Skill 注册表派发，**响应契约不变**；`main.py`/`mcp_server.py` 迁 skills（ctx 从 dict 改 SkillContext 直传）；`ai/__init__.py` 去 agent 导出；B1 等价测试（Skill vs Agent 两路对照）完成防漂移使命，改为直接断言
+- **写入即索引（产品契约补漏，落 Skill 层）**：action 确认写入后同步向量索引——此前仅 create_note 端点索引，agent 写的笔记检索不到（召回闭环断）；契约在 Skill 层则所有入口一致（orchestrate / MCP）；`VectorLike` 协议补 `add`
+
+### Fixed（review 抓到的并发缺陷）
+
+- FastAPI 同步 handler 跑线程池：双击 approve 的并发 resume，第二个会撞「resume() 非法状态」RuntimeError → 500，并发 prune 还会重复删 key——查表 + resume + prune 整体持锁（后到者 404）
+
+### 实测
+
+- 123 test 全过（+8 orchestrate 端点测试，-2 agent 冗余测试），coverage 93.61%，ruff / mypy 干净（28 源文件，agents.py 移除）
+
 ## [0.12.0] - 2026-09-03
 
 ### Added（M1-B4 · Trace + eval runner）

@@ -9,12 +9,10 @@
 
 import pytest
 from helpers import (
-    FakeClassifier,
-    FakeCoach,
-    FakeReviewer,
     FakeVault,
     FakeVector,
     app_test_client,
+    fake_skill_ctx,
     fresh_auth_token,
 )
 
@@ -79,7 +77,7 @@ def test_create_note_happy(client, tmp_path, monkeypatch):
 
 
 def test_classify_text_happy(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("workbench.bridge.classifier", FakeClassifier())
+    monkeypatch.setattr("workbench.bridge.skill_ctx", fake_skill_ctx(tmp_path))
     r = client.post(
         "/api/classify_text",
         json={"text": "今天要做一个决策"},
@@ -90,19 +88,15 @@ def test_classify_text_happy(client, tmp_path, monkeypatch):
 
 
 def test_scan_decision_closed_loop_happy(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("workbench.bridge.reviewer", FakeReviewer())
-    r = client.post(
-        "/api/scan_decision_closed_loop", json={}, headers=_authed(monkeypatch, tmp_path)
-    )
+    monkeypatch.setattr("workbench.bridge.skill_ctx", fake_skill_ctx(tmp_path))
+    r = client.post("/api/scan_decision_closed_loop", json={}, headers=_authed(monkeypatch, tmp_path))
     assert r.status_code == 200
     assert "缺关联问题" in r.json()["missing"][0]
 
 
 def test_reopen_task_happy(client, tmp_path, monkeypatch):
-    monkeypatch.setattr("workbench.bridge.coach", FakeCoach())
-    r = client.post(
-        "/api/reopen_task", json={"task": "复盘上一个项目"}, headers=_authed(monkeypatch, tmp_path)
-    )
+    monkeypatch.setattr("workbench.bridge.skill_ctx", fake_skill_ctx(tmp_path))
+    r = client.post("/api/reopen_task", json={"task": "复盘上一个项目"}, headers=_authed(monkeypatch, tmp_path))
     assert r.status_code == 200
     assert r.json()["results"][0]["title"] == "历史经验A"
 

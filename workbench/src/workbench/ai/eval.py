@@ -54,6 +54,9 @@ class CaseVector:
         related = self.script.get("related") or DEFAULT_RELATED
         return [dict(r) for r in related[:top_k]]
 
+    def add(self, doc_id: str, title: str, content: str, path: str = "") -> None:
+        return None  # 协议一致性：eval 重放只检索不落索引
+
 
 @dataclass
 class GoldenCase:

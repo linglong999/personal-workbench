@@ -1,13 +1,12 @@
-"""M1 Skill 层测试：B1 协议/注册表/迁移等价 + B2 新 Skill（decision/action）。
+"""M1 Skill 层测试：B1 协议/注册表/迁移 + B2 新 Skill（decision/action）+ B5 收口契约。
 
-等价断言（迁移无回归的机制）：同一 fake 输入下，Skill.run 输出与现有 Agent
-输出一致——agents.py B5 退役前两路对照防漂移。
-B2 契约：interrupt 发射归 B3 主管；Skill 侧落「标志 + 未确认零副作用 + 确认后写入」。
+B1 等价测试（Skill vs Agent 两路对照）已完成防漂移使命，B5 agents.py 退役后改为
+直接断言。B2 契约：interrupt 发射归主管；Skill 侧落「标志 + 未确认零副作用 + 确认后写入」。
+B5 新契约：确认写入后同步向量索引（写入即索引，所有入口一致）。
 """
 
 import pytest
 
-from workbench.ai.agents import ClassifierAgent, CoachAgent, ReviewerAgent
 from workbench.ai.skills.base import Skill, SkillContext
 from workbench.ai.skills.registry import REGISTRY, get_skill
 from workbench.knowledge.vault import VaultStore
@@ -22,8 +21,16 @@ class FakeEngine:
 
 
 class FakeVector:
+    """search 供 recall；add 记录调用（写入即索引契约的断言依据）。"""
+
+    def __init__(self):
+        self.added: list[tuple] = []
+
     def search(self, query, top_k):
         return [{"id": "n1", "title": "历史经验", "score": 0.9}][:top_k]
+
+    def add(self, doc_id, title, content, path=""):
+        self.added.append((doc_id, title, content, path))
 
 
 def make_ctx(tmp_path):
@@ -59,29 +66,24 @@ def test_get_skill_unknown_raises():
         get_skill("nope")
 
 
-def test_classify_skill_equivalent_to_agent(tmp_path):
+def test_classify_skill(tmp_path):
     ctx = make_ctx(tmp_path)
     result = get_skill("classify").run(ctx, {"text": "我该选哪个方案"})
-    agent_label = ClassifierAgent(ctx.engine).classify("我该选哪个方案")
-    assert result.output["label"] == agent_label == "决策"
+    assert result.output["label"] == "决策"
     assert result.confidence == 1.0
 
 
-def test_review_skill_equivalent_to_agent(tmp_path):
+def test_review_skill(tmp_path):
     ctx = make_ctx(tmp_path)
     ctx.vault.create_note("决策备忘", "孤决策", "---\ntype: 决策备忘\n---")
     result = get_skill("review").run(ctx, {})
-    agent_missing = ReviewerAgent(ctx.engine).scan_closed_loop(ctx.vault)
-    assert result.output["missing"] == agent_missing
     assert len(result.output["missing"]) == 1  # read_all_notes 返回内容；孤决策缺关联 → 1 条
     assert "缺少关联问题" in result.output["missing"][0]
 
 
-def test_recall_skill_equivalent_to_agent(tmp_path):
+def test_recall_skill(tmp_path):
     ctx = make_ctx(tmp_path)
     result = get_skill("recall").run(ctx, {"task": "复盘上一个项目", "top_k": 3})
-    agent_results = CoachAgent(ctx.engine, ctx.vector).recall_for_task("复盘上一个项目", 3)
-    assert result.output["results"] == agent_results
     assert result.output["results"][0]["title"] == "历史经验"
 
 
@@ -152,8 +154,9 @@ class FakeActionEngine(FakeEngine):
 def action_ctx(tmp_path, draft):
     # 真 VaultStore：写入路径测真契约（ALLOWED_FOLDERS 白名单、落盘、读取）
     vault = VaultStore(str(tmp_path / "vault"))
-    ctx = SkillContext(engine=FakeActionEngine(draft), vault=vault, vector=None)
-    return ctx, vault
+    vector = FakeVector()
+    ctx = SkillContext(engine=FakeActionEngine(draft), vault=vault, vector=vector)
+    return ctx, vault, vector
 
 
 MEMO_DRAFT = {
@@ -163,7 +166,7 @@ MEMO_DRAFT = {
 
 
 def test_action_unconfirmed_has_no_side_effect_and_idempotent(tmp_path):
-    ctx, vault = action_ctx(tmp_path, MEMO_DRAFT)
+    ctx, vault, vector = action_ctx(tmp_path, MEMO_DRAFT)
     args = {"kind": "决策备忘", "text": "决定选 A"}
     for _ in range(2):  # 重复未确认调用：零写入（幂等）
         result = get_skill("action").run(ctx, args)
@@ -171,10 +174,11 @@ def test_action_unconfirmed_has_no_side_effect_and_idempotent(tmp_path):
         assert result.output["title"] == "选 A 方案"  # 预览带给用户看（B3 confirm interrupt 的内容）
         assert "关联问题" in result.output["content"]
     assert vault.list_notes("决策备忘") == []
+    assert vector.added == []  # 零副作用含索引：未确认不 add
 
 
 def test_action_confirmed_writes_decision_memo(tmp_path):
-    ctx, vault = action_ctx(tmp_path, MEMO_DRAFT)
+    ctx, vault, vector = action_ctx(tmp_path, MEMO_DRAFT)
     result = get_skill("action").run(
         ctx, {"kind": "决策备忘", "text": "决定选 A", "confirmed": True}
     )
@@ -183,11 +187,17 @@ def test_action_confirmed_writes_decision_memo(tmp_path):
     notes = vault.list_notes("决策备忘")
     assert len(notes) == 1
     assert "关联问题" in notes[0].read_text(encoding="utf-8")  # 闭环契约：review 扫描依赖该节
+    # B5 写入即索引：确认写入后同步向量库（recall 才能召回 agent 写的卡）
+    assert len(vector.added) == 1
+    doc_id, title, content, path = vector.added[0]
+    assert title == "选 A 方案"
+    assert "关联问题" in content
+    assert path.endswith(".md")
 
 
 def test_action_confirmed_writes_todo_into_action_log(tmp_path):
     todo_draft = {"title": "联系供应商", "content": "## 下一步\n询价三家\n## 次日跟进\n明早 10 点"}
-    ctx, vault = action_ctx(tmp_path, todo_draft)
+    ctx, vault, vector = action_ctx(tmp_path, todo_draft)
     result = get_skill("action").run(
         ctx, {"kind": "待办", "text": "要询价", "confirmed": True}
     )
@@ -195,11 +205,13 @@ def test_action_confirmed_writes_todo_into_action_log(tmp_path):
     notes = vault.list_notes("行动记录")  # 待办 → 行动记录（Vault 白名单目录）
     assert len(notes) == 1
     assert "次日跟进" in notes[0].read_text(encoding="utf-8")
+    assert len(vector.added) == 1  # 待办写入同样索引
 
 
 def test_action_unknown_kind_rejected_before_any_work(tmp_path):
-    ctx, vault = action_ctx(tmp_path, MEMO_DRAFT)
+    ctx, vault, vector = action_ctx(tmp_path, MEMO_DRAFT)
     with pytest.raises(ValueError):  # 入口即拒绝（未确认/已确认一致），不产出预览也不写库
         get_skill("action").run(ctx, {"kind": "乱写", "text": "x", "confirmed": True})
     assert vault.list_notes("决策备忘") == []
+    assert vector.added == []
 

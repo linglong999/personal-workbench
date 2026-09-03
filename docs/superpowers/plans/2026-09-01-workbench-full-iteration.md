@@ -1444,6 +1444,24 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 
 > **B4 执行记录（2026-09-03，117 test / coverage 93.61%（trace.py、eval.py 均 100%）/ ruff、mypy 干净）：** TraceStore（一 run 一 JSON）+ verify/attribute_failure + 最小 eval runner + 坏例回流（decision/review/实践/等待快照/ERROR 五类提取路径全测）。**review 三个发现均处置**：1) mypy 抓出 SkillContext 类型债（engine/vector 标注具体类，CaseEngine 结构兼容但类型不符）——改为 EngineLike/VectorLike 结构协议，"Skill 只从 ctx 拿能力"在类型层落实；2) 回流核心分支（decision analysis 提取去 needs_judgement、review_missing、related 脚本化、等待快照 expect）初测遗漏——补 7 测后两模块 100%；3) case.id 拼路径存在目录逃逸（外部 JSON 数据边界）——run_case 入口即拒。**无逻辑 bug**（B3 建立的模式直接复用）。类型解耦验证：trace 只认 dict 零反向依赖，无循环 import。
 
+### M1-B5 · Bridge 接线收口（逐任务 TDD）
+
+> **设计落地（2026-09-03 补写）：** 主管入口 + agents.py 退役；**前端接入不在本批**（按批次表约定，接入范围完成后与用户确认）。
+> **`POST /api/orchestrate`（{text} 起新回合）+ `POST /api/orchestrate/resume`（{run_id, decision} 续回合）**：Orchestrator 有状态，HTTP 无状态——bridge 持会话注册表 `_sessions: dict[run_id, Orchestrator]`；**终态（DONE/ERROR）即删**（不可 resume → 404，注册表不变式保证 resume 永不撞 RuntimeError）+ cap 50 最旧先出（防放弃等待的会话泄漏）。响应 = run_id/status/state/output/interrupt/events（asdict 全链——事件链本就是给前端渲染的观测数据）。
+> **写入即索引（产品契约补漏）：** create_note 端点写笔记后同步向量索引，但 action Skill 确认写入不索引——agent 写的笔记检索不到，召回闭环断。契约落在 **Skill 层**（所有入口一致：orchestrate/未来 MCP）：action 确认写入后 `ctx.vector.add(...)`；VectorLike 协议补 `add`，CaseVector/测试 fake 补 no-op add。
+> **agents.py 退役（等价测试使命完成）：** bridge 三端点（classify/scan/reopen）迁 skills，**响应契约不变**（前端 LIVE 模式每天在调）；main.py/mcp_server.py 迁 skills（ctx 从 dict 改 SkillContext 直传）；`ai/__init__.py` 去 agent 导出；B1 等价测试改为直接断言（agents 删除后对照对象消失，等价使命已完成）。
+> **TraceStore 接线：** bridge `.data/traces`（.data 已 gitignore）；测试 monkeypatch `bridge.skill_ctx`/`bridge.trace_store`（CaseEngine 脚本化，不碰真 LLM/Vault）。
+
+- [x] **Step 1（红）**：`tests/test_bridge_orchestrate.py`（新）+ `tests/test_bridge_endpoints.py` 改写 + `tests/helpers.py`（ScriptEngine/fake_skill_ctx/FakeVault.read_all_notes）+ `tests/test_skills.py`（去 agent 等价改直接断言；FakeVector 补 add 记录器；action 确认写入补**索引断言**）+ `tests/test_ai.py`（删 2 个 agent 测试）+ `tests/test_orchestrator.py`/`test_mcp_server.py`（fake/入参适配）——
+  1. orchestrate：无 token 401；happy path（waiting_human + confirm interrupt + run_id → resume approve → done written + Vault 落盘 1 张 + trace 落盘）；resume reject → done 不写；resume 未知 run_id → 404；终态后再 resume → 404；空输入 → 200 + status=error（回合错误是数据不是传输错误）
+  2. 三旧端点：monkeypatch skill_ctx 后响应契约不变（label/missing/results）
+  3. action 索引契约：确认写入 → vector.add(title, content, path) 被调用（红：现未实现）
+- [x] **Step 2（绿）**：`bridge.py`（skill_ctx + 会话注册表 + 两新端点 + 三端点迁 skills）+ `action.py`（写入后索引）+ `base.py`（VectorLike.add）+ `eval.py`（CaseVector.add）+ `main.py`/`mcp_server.py`（迁 skills）+ `ai/__init__.py` + **删除 `agents.py`**
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+- [x] **Step 4**：review + CHANGELOG + commit + 与用户确认前端接入范围
+
+> **B5 执行记录（2026-09-03，123 test / coverage 93.61% / ruff、mypy 干净）：** 主管入口（orchestrate/resume + 会话注册表终态即删 + cap 50）+ agents.py 退役（bridge/main/mcp_server 全迁 skills，三旧端点响应契约不变有测试锁定）+ 写入即索引契约落 Skill 层。**review 抓到 1 个并发缺陷并修复**：FastAPI 同步 handler 跑线程池，双击 approve 的并发 resume 第二个请求撞「resume() 非法状态」RuntimeError → 500（并发 prune 还有重复删 key 的 KeyError 风险）——查表+resume+prune 整体持锁串行化，后到者 404。**M1 全部 5 批完成**；前端接入范围待用户拍板（响应已透出 events 全链，前端渲染自由度充足）。
+
 ### M1 · 成功准则核对
 
 M1 完成标志：

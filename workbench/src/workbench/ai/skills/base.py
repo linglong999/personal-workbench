@@ -27,6 +27,8 @@ class EngineLike(Protocol):
 class VectorLike(Protocol):
     def search(self, query: str, top_k: int) -> list[dict]: ...
 
+    def add(self, doc_id: str, title: str, content: str, path: str = "") -> None: ...
+
 
 @dataclass
 class SkillContext:

@@ -54,6 +54,9 @@ class FakeVector:
     def search(self, query, top_k):
         return [{"id": "n1", "title": "相关经验", "score": 0.9}][:top_k]
 
+    def add(self, doc_id, title, content, path=""):
+        return None  # action 确认写入的索引同步（B5 契约）：主管测试不关注索引细节
+
 
 class FakeClock:
     """手动假钟：默认不前进，测试显式 advance。"""
