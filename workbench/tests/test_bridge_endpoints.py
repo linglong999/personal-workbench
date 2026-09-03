@@ -139,3 +139,67 @@ def test_invalid_token_401(client, tmp_path, monkeypatch):
         headers={"Authorization": "Bearer garbage"},
     )
     assert r.status_code == 401
+
+
+# ═══════════ M4-B2 · /api/stats 聚合端点（真组件 tmp 落盘）═══════════
+
+
+def _stats_wire(monkeypatch, tmp_path):
+    """替换 vault/vector 单例为 tmp 真组件（stats 扫真文件与真 Chroma，不碰真库）。"""
+    from workbench.knowledge.vault import VaultStore
+    from workbench.knowledge.vector import VectorStore
+
+    monkeypatch.setattr("workbench.bridge.vault", VaultStore(str(tmp_path / "vault")))
+    monkeypatch.setattr("workbench.bridge.vector", VectorStore(str(tmp_path / "chroma")))
+
+
+def test_stats_requires_auth(client):
+    r = client.get("/api/stats")
+    assert r.status_code == 401
+
+
+def test_stats_invalid_range_422(client, tmp_path, monkeypatch):
+    """决策 16：range 只认 7d|30d（Literal 注解原生 422）。"""
+    _stats_wire(monkeypatch, tmp_path)
+    r = client.get("/api/stats?range=10d", headers=_authed(monkeypatch, tmp_path))
+    assert r.status_code == 422
+
+
+def test_stats_unknown_include_422(client, tmp_path, monkeypatch):
+    """决策 16：include 逗号分隔手动校验，未知 token 422（拼错早暴露）。"""
+    _stats_wire(monkeypatch, tmp_path)
+    r = client.get("/api/stats?include=knowledge,foo", headers=_authed(monkeypatch, tmp_path))
+    assert r.status_code == 422
+
+
+def test_stats_default_both_modules(client, tmp_path, monkeypatch):
+    """缺省 include=knowledge,usage：双模块键齐备，回显 range，趋势 7 点。"""
+    _stats_wire(monkeypatch, tmp_path)
+    r = client.get("/api/stats", headers=_authed(monkeypatch, tmp_path))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["range"] == "7d"
+    assert set(body) == {"range", "knowledge", "usage"}
+    assert len(body["knowledge"]["trend"]) == 7
+    assert len(body["usage"]["trend"]) == 7
+    assert len(body["knowledge"]["distribution"]) == 6
+
+
+def test_stats_include_knowledge_only(client, tmp_path, monkeypatch):
+    """include 过滤：未请求的模块键不出现（决策 19）；30d 趋势 30 点。"""
+    _stats_wire(monkeypatch, tmp_path)
+    r = client.get(
+        "/api/stats?include=knowledge&range=30d", headers=_authed(monkeypatch, tmp_path)
+    )
+    body = r.json()
+    assert body["range"] == "30d"
+    assert "usage" not in body
+    assert len(body["knowledge"]["trend"]) == 30
+
+
+def test_stats_include_usage_only(client, tmp_path, monkeypatch):
+    _stats_wire(monkeypatch, tmp_path)
+    r = client.get("/api/stats?include=usage", headers=_authed(monkeypatch, tmp_path))
+    assert r.status_code == 200
+    assert "knowledge" not in r.json()
+    assert len(r.json()["usage"]["trend"]) == 7

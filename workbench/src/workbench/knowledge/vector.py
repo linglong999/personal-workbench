@@ -86,6 +86,10 @@ class VectorStore:
         h = (metas[0] or {}).get("content_hash")
         return h if isinstance(h, str) else None
 
+    def count(self) -> int:
+        """collection 记录总数（chromadb 官方语义：无过滤、全量，M4-B2 决策 18）。"""
+        return self.collection.count()
+
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         res = self.collection.query(query_texts=[query], n_results=top_k)
         docs = (res.get("documents") or [[]])[0] or []

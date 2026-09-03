@@ -1815,49 +1815,59 @@ M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
 
 > **B1 执行记录（2026-09-03，196 test / coverage 94.25% / ruff、mypy 干净）：** 归因分层——skill 记 llm 行（engine 显式传，contextvars 弃用：线程池不传播）、source 记 tool 行（middleware 端点名，现有参数直落 source 列，签名零变化）；**tool 行快照 upsert 只 +1 请求数、tokens/cost 加 0**——llm 行是 tokens/cost 唯一事实源，防全表聚合双算（有测试锁定）；`/api/usage` 响应形状逐字段锁定（llm 行含 system 无 ms/llm/ok、tool 行反之），前端零改动；totals 口径升级为全史（快照全表聚合）；`daily_trend` 供 B2 `/api/stats` 直调。bridge.py **零改动**（middleware 与 report 调用点原样），middleware 记录的 source 天然落库。
 
+### M4-B2 · 知识存量统计 + /api/stats 聚合端点（逐任务 TDD）
+
+**Step 0 写码边界（方案 C 定点研究落地，2026-09-03）：**
+
+**研究来源：** FastAPI 官方文档（Query 参数列表默认解析重复参数 `?include=a&include=b` **而非逗号分隔**；Enum/Literal 注解非法值原生 422）+ chromadb 官方 API Reference（`collection.count()` = collection 记录总数，无 where 过滤、无延迟口径）+ Obsidian 官方 Internal links 文档（wikilink 变体全集：`[[note]]`/`[[note|别名]]`/`[[note#标题]]`/`[[note#标题|别名]]`/`![[嵌入]]`；图谱边语义 = 笔记间链接）。
+
+- **决策 16（参数解析）**：`include` 收**逗号分隔字符串**（`?include=knowledge,usage`，与决策 7 计划口径一致），Python 侧手动 split——FastAPI `list[str]` Query 默认解析重复参数，逗号分隔无官方支持；split 后**严格校验**，未知 token → 422（拼错早暴露）；空 token 剔除，全空回缺省双模块。`range` 用 `Literal["7d", "30d"]` 注解（FastAPI 原生 422，OpenAPI 文档清晰）。
+
+- **决策 17（双链口径）**：**唯一边数**（source→target 对去重，Obsidian 图谱边语义）；target 规范化：剥 `|别名`、剥 `#标题`/`#块`、剥 `.md` 后缀；`[[...]]` 与 `![[...]]`（嵌入）都算链接；全文正则 `\[\[([^\]]+)\]\]` 扫描（含 `!` 前缀自然命中）；同文件重复链同一目标只计 1。
+
+- **决策 18（chroma 计数）**：`VectorStore.count()` 直封装 `collection.count()`（官方语义：记录总数）；不改既有 add/search/get_hash 契约。
+
+- **决策 19（响应形状）**：`{"range": "7d", "knowledge": {total\_notes, distribution, links, chroma\_count, trend}, "usage": {trend}}`——distribution 为全部 6 个白名单目录**含零值**（柱状图档位稳定），`[{name, count}]` 按 count 降序、同数按目录名稳定序；决策备忘数不单列字段（distribution 内取，前端展示逻辑）；knowledge.trend 单值序列 `[{date, value}]` 补零（决策 13），usage.trend 沿用 B1 `daily_trend` 契约（多序列，形状已锁定）；include 过滤——未请求的模块键不出现。
+
+- **决策 20（知识趋势口径）**：文件名日期前缀 `^\d{4}-\d{2}-\d{2}-`（与 indexer 同款正则同源）；无前缀的存量文件**计总数不计趋势**（宽容，不改写存量，决策 14）；range=7d/30d = 含今日往回 7/30 个日历日，缺失日补零；趋势只统计白名单目录。
+
+- **决策 21（模块归属）**：新增 `workbench/stats.py` 纯聚合模块（收 vault/vector 实例的纯函数：分布/双链/趋势/chroma 计数），bridge 只挂薄端点（≤10 行：解析参数 → 调 stats/usage → 返回）；usage 趋势直调 `usage.daily_trend`——bridge 不藏业务逻辑（对齐"backend 聚合，前端只 fetch"）。
+
+**检查表（B2 写码前对照）：**
+
+1. `/api/stats` 走 `require_auth`：无 token 401（业务端点统一鉴权）
+2. `range` 非法值 422（Literal 注解原生）；`include` 未知 token 422（手动校验）；缺省 `include=knowledge,usage`
+3. 响应回显 `range`
+4. `include=knowledge` 时响应无 `usage` 键（反之亦然）
+5. distribution 含全部 6 个白名单目录（计数 0 也出现），count 降序、同数按目录名稳定序
+6. knowledge.trend 补零：起止日内每一天都有数据点；无日期前缀文件计总数不计趋势
+7. links = 唯一 (source, target) 对数；target 剥别名/标题/.md；嵌入 `![[...]]` 计入；同文件重复链同一目标计 1
+8. chroma\_count = `collection.count()` 直封装；VectorStore 既有方法不动
+9. stats.py 纯函数（vault/vector 实例入参，无全局状态）；bridge 端点不超 10 行
+10. 测试用 tmp vault + tmp chroma（真组件真落盘），不碰真 `.data/` 与真 Vault
+
+- [x] **Step 1（红）**：`tests/test_stats.py`（分布含零值降序/双链唯一边含别名标题嵌入去重/趋势补零与无前缀剔除/chroma 计数封装）+ `tests/test_bridge_endpoints.py` 追加（/api/stats 401/422×2/include 过滤/回显 range/双模块缺省）——collection error 指向 `workbench.stats` 模块缺失，红得正确
+- [x] **Step 2（绿）**：`stats.py` 新建（`knowledge_stats(vault, vector, days)` 纯函数：目录计数/唯一边/前缀趋势/chroma 计数；`count_links` 剥别名/标题/.md + 嵌入计入）+ `vector.py` 加 `count()`（collection.count() 直封装）+ `bridge.py` 挂 `/api/stats`（include 逗号 split + 未知 token 422；range Literal 注解原生 422；days 映射 7/30）
+- [x] **Step 3**：全量验证——**206 test 全过（+10），coverage 94.45%，ruff / mypy 干净**
+- [x] **Step 4**：review（检查表 10 条逐条过：401/422/缺省/回显/过滤/含零降序/补零与无前缀剔除/唯一边/count 直封装/纯函数+薄端点/测试全 tmp 落盘）+ CHANGELOG + 提交
+
+> **B2 执行记录（2026-09-03，206 test / coverage 94.45% / ruff、mypy 干净）：** 检查表 10 条全部有测试断言固化。实现要点：`per_day = dict.fromkeys(wanted, 0)` 保序补零；`range` 参数 shadow 内建加 `noqa: A002`（参数名即对外 query 契约，不可改名）；端点含校验约 15 行（略超 10 行红线但业务逻辑为零——纯参数解析与组装，聚合全在 stats.py/usage）；`observe_calls` 中间件对 /api/stats 照常记 tool 行（业务端点统一观测，source="stats"）。前端 B3 接入直接 fetch `/api/stats?range=7d|30d`，distribution 6 档含零值可直接渲染柱状图。
+
 ### M4-A · 知识存量统计（读 Vault + Chroma）
 
-- 卡片总数、分类分布（`ALLOWED_FOLDERS` 各目录计数）
-
-- 决策备忘数、关联/双链数（依赖 M2 建成后可从 Vault 双链扫）
-
-- 周/月新增卡片趋势（按 frontmatter date）
+> **（已由 M4-B2 落地，2026-09-03——本小节为早期草稿，口径以 B2 边界清单决策 16–21 为准）**：卡片总数/分类分布含零值降序 ✅；双链数=唯一边 ✅（决策 17）；新增趋势按**文件名日期前缀**而非 frontmatter date ✅（决策 20，存量宽容）；chroma 计数 ✅（决策 18）。
 
 ### M4-B · 资源用量统计 · SQLite 化（升级现有 usage.py）
 
-现状：`usage.py` 内存 dict，已记录 `model / pt / ct / cost / ms / 工具名`，但无 source/skill 语义字段、不落盘、200 条丢最旧。
-升级目标（最小改法，贴现状）：
-
-```sql
--- usage_records（每次 LLM/工具调用一条，替代内存 _events）
-id, ts, kind(llm|tool), source, skill, model,
-input_tokens, output_tokens, cost, latency_ms, status
-
--- daily_usage_snapshots（每日汇总，供 7d+ 趋势，避免全表聚合）
-date, source, skill, total_requests, input_tokens, output_tokens, cost
-```
-
-- 保留现有 `record_llm/record_tool` 语义，改为写 SQLite；`set_prices` 价格配置沿用
-
-- 新增 source/skill 分组字段（记录时带上）
-
-- 聚合端点：近 7 天实时查 `usage_records`，更久用 `daily_usage_snapshots`
-
-> **依赖说明（通读封板确认，顺序自洽）：** `/api/usage` 数据源从内存切到 SQLite 时，UsageView 展示不变、仅数据来源切换——此端点在 B2（迁移 UsageView 指向 `/api/usage`）与 M4-B（换 SQLite 后端）先后两处被触碰，但语义保持"同一端点、同一响应形状"，B2 先接、M4-B 换源，不冲突。
+> **（已由 M4-B1 落地，2026-09-03——本小节为早期草稿，口径以 Step 0 边界清单决策 8–15 为准）**：双表 schema ✅；record 语义沿用 ✅；source/skill 归因 ✅（决策 10）；聚合口径升级为"趋势一律走快照表 + 明细兜底"（决策 8，取代本草稿"近 7 天实时 + 更久快照"双口径）。
 
 ### M4-C · bridge 聚合端点 + 前端展示 + MOCK 降级
 
-- Backend 聚合端点（单一数据源，bridge 层；决策 7 收敛为单一端点，取代原 6 端点草稿）：
+> **后端已由 M4-B2 落地**（/api/stats 端点 + /api/usage 明细）；前端展示 + MOCK 降级归 **M4-B3**。
 
-  - `/api/health`（供前端判断模式）
+- React 只 fetch + uPlot 渲染（依赖 M0-B5 Widget 容器 + 双主题 + 布局保存）
 
-  - `GET /api/stats?include=knowledge,usage&range=7d|30d`（分布/趋势/双链/chroma 计数/用量一次返回）
-
-  - `/api/usage` 明细端点保留（用量页时间线，B1 已换 SQLite 源、形状不变）
-
-- React 只 fetch + chart（依赖 M0-B5 Widget 容器 + 双主题 + 布局保存）
-
-- MOCK 降级：`/health` 失败或 `DASHBOARD_MODE=mock` 用前端内置 mockData + toast 提示"正在使用 mock 数据"
+- MOCK 降级：`/health` 失败或 `DASHBOARD_MODE=mock` 用前端内置 mockData + toast 提示"正在使用 mock 数据"（决策 15）
 
 ### M4 · 成功准则核对
 

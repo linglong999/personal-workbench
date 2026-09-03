@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.19.0] - 2026-09-03
+
+### Added（M4-B2 · 知识存量统计 + /api/stats 聚合端点）
+
+- 新增 `workbench/stats.py` 纯聚合模块：`knowledge_stats(vault, vector, days)` 返回 total\_notes / distribution / links / chroma\_count / trend——分布含全部 6 白名单目录**含零值**按 count 降序（同数目录名稳定序）；**双链数 = 唯一 (source, target) 边**（Obsidian 图谱边语义：剥 `|别名`/`#标题`/`.md`，嵌入 `![[...]]` 计入，同文件重复链同一目标计 1）；新增趋势按**文件名日期前缀**（indexer 同款正则）聚合，缺失日补零，无前缀存量文件计总数不计趋势（宽容不改写）
+- `VectorStore.count()`：chromadb `collection.count()` 直封装（记录总数、无过滤）
+- `GET /api/stats?include=knowledge,usage&range=7d|30d` 聚合端点（require\_auth）：include 逗号分隔手动解析、未知 token 422（拼错早暴露）；range Literal 注解非法值原生 422；响应回显 range，未请求的模块键不出现；usage 趋势直调 B1 `daily_trend`
+- bridge 端点仅参数解析与组装（聚合逻辑零），对齐"backend 聚合、前端只 fetch"约定
+
+### 实测
+
+- 206 test 全过（+10：test\_stats.py 单元 4 + 端点 6），coverage 94.45%，ruff / mypy 干净；测试用 tmp vault + tmp chroma 真组件真落盘，不碰真 Vault/.data
+
 ## [0.18.0] - 2026-09-03
 
 ### Changed（M4-B1 · usage SQLite 化——重启不丢 + 日快照 + skill/source 归因）

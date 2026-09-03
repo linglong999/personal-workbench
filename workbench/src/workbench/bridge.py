@@ -19,6 +19,7 @@ import threading
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -38,6 +39,7 @@ from workbench.config import load_config
 from workbench.knowledge.indexer import sync_vault
 from workbench.knowledge.vault import VaultStore
 from workbench.knowledge.vector import VectorStore
+from workbench.stats import knowledge_stats
 
 cfg = load_config()
 llm = LLMClient(
@@ -216,6 +218,30 @@ def api_list_tags(_: dict = Depends(require_auth)):
 def api_usage(_: dict = Depends(require_auth)):
     """调用观测：工具调用 + LLM token 用量 + 成本估算（前端「用量」页）。"""
     return usage.report()
+
+
+@app.get("/api/stats")
+def api_stats(
+    include: str = "knowledge,usage",
+    range: Literal["7d", "30d"] = "7d",  # noqa: A002 — query 参数名即对外契约
+    _: dict = Depends(require_auth),
+):
+    """M4-B2 聚合统计：knowledge 存量/趋势 + usage 用量趋势（决策 7/16/19）。
+
+    include 逗号分隔（FastAPI list[str] 默认解析重复参数，无逗号支持——手动
+    split，未知 token 422 拼错早暴露）；range Literal 注解非法值原生 422。
+    """
+    mods = [m.strip() for m in include.split(",") if m.strip()] or ["knowledge", "usage"]
+    bad = sorted(set(mods) - {"knowledge", "usage"})
+    if bad:
+        raise HTTPException(status_code=422, detail=f"unknown include: {','.join(bad)}")
+    days = 7 if range == "7d" else 30
+    body: dict = {"range": range}
+    if "knowledge" in mods:
+        body["knowledge"] = knowledge_stats(vault, vector, days)
+    if "usage" in mods:
+        body["usage"] = {"trend": usage.daily_trend(days)}
+    return body
 
 
 @app.post("/api/create_note")
