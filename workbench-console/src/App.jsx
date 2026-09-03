@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMode, setMode } from './api/client.js'
+import { bindGlobalToast } from './utils.js'
 import { ThemeProvider } from './theme/ThemeProvider.jsx'
 import RequireAuth from './auth/RequireAuth.jsx'
 import { isAuthed } from './auth/auth.js'
@@ -50,6 +51,11 @@ function Shell() {
   }, [])
 
   useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), [])
+
+  // 全局 toast 总线：widget（无 toast prop 链）经 fireToast 发通知
+  useEffect(() => {
+    bindGlobalToast(toast)
+  }, [toast])
 
   const toggleMode = useCallback(() => {
         const m = mode === 'live' ? 'mock' : 'live'

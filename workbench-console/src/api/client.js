@@ -101,6 +101,55 @@ export function mockRule(v) {
 
 /* ───────── MOCK 演示数据 ───────── */
 
+/* M4-B3 stats widget 演示数据：形状对齐 GET /api/stats 响应（MOCK 模式渲染）。
+   趋势按 range 生成（周期函数，确定性——多次渲染不跳变）。 */
+function mockDays(range, fn) {
+  const days = range === '30d' ? 30 : 7
+  const out = []
+  const today = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    out.push(fn(d.toISOString().slice(0, 10), days - 1 - i, i))
+  }
+  return out
+}
+
+export function mockStatsFor(range) {
+  const w7 = [2, 0, 3, 1, 4, 2, 5]
+  return {
+    knowledge: {
+      total_notes: 80,
+      distribution: [
+        { name: '知识卡片', count: 24 },
+        { name: '行动记录', count: 18 },
+        { name: '问题整理', count: 14 },
+        { name: '决策备忘', count: 12 },
+        { name: '复盘沉淀', count: 9 },
+        { name: '愿景与原则', count: 3 },
+      ],
+      links: 42,
+      chroma_count: 80,
+      trend: mockDays(range, (date, i) => ({
+        date,
+        value: range === '30d' ? [3, 0, 1, 2, 4, 1, 0][(i * 3) % 7] : w7[i],
+      })),
+    },
+    usage: {
+      trend: mockDays(range, (date, i) => {
+        const req = range === '30d' ? 8 + ((i * 5) % 13) : [12, 8, 15, 10, 18, 14, 20][i]
+        return {
+          date,
+          requests: req,
+          input_tokens: req * 2100,
+          output_tokens: req * 620,
+          cost: req * 0.011,
+        }
+      }),
+    },
+  }
+}
+
 export const inboxData = [
   {
     kind: '想法',

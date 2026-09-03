@@ -621,5 +621,34 @@ h2, h3, .col-title { font-weight: 700; letter-spacing: -0.01em; }
 }
 .phw p { font-size: 0.82rem; color: var(--ink-2); }
 .phw-sub { font-size: 0.72rem !important; color: var(--muted); }
+
+/* ── M4-B3 stats widget（知识存量 / 用量趋势）── */
+.ksw { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
+.ksw-kpis { display: grid; grid-auto-flow: column; gap: 6px; }
+.ksw-kpis .us-card { padding: 5px 9px; display: flex; flex-direction: column; gap: 1px; }
+.ksw-kpis .us-card b { font-size: 1.1rem; }
+.ksw-kpis .us-card span { font-size: 0.7rem; }
+.ksw-sec { display: flex; flex-direction: column; gap: 2px; }
+.ksw-sec-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.72rem; color: var(--muted);
+}
+.ksw-sec-head > span:first-child { font-weight: 600; color: var(--ink-2); }
+.ksw-range { margin-left: auto; display: flex; gap: 2px; }
+.ksw-rbtn {
+  font-size: 0.68rem; font-family: var(--mono); padding: 1px 7px;
+  border-radius: var(--r-sm); color: var(--muted); border: 1px solid transparent;
+}
+.ksw-rbtn.on { color: var(--acc-ink); background: var(--acc-soft); border-color: var(--acc); }
+.ksw-rbtn:hover { color: var(--ink); }
+.ksw-legend { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--muted); }
+.ksw-legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; margin-left: 4px; }
+.ksw-empty {
+  display: grid; place-items: center; height: 100px;
+  font-size: 0.78rem; color: var(--muted);
+}
+.uplot-wrap { width: 100%; }
+.uplot-wrap .u-legend { display: none; }
+.uplot-wrap .u-cursor-x, .uplot-wrap .u-cursor-y { stroke: var(--rule); }
 /* widget 化的格子内卡片：继承 kb-card 的可拖拽/缩放特性 */
 .grid-shell .widget { background: var(--bg-raise); border: 1px solid var(--rule); border-radius: var(--r-md); padding: 12px; overflow: auto; }

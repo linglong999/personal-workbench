@@ -2,6 +2,22 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.20.0] - 2026-09-03
+
+### Added（M4-B3 · 前端统计 widget 接入——知识存量 + 用量趋势）
+
+- 新增 `src/widgets/UPlotChart.jsx`：uPlot 的 React 封装（data/buildOpts/theme 变化销毁重建；ResizeObserver 跟随容器宽；卸载 `destroy()` 防泄漏；`cssVar()` 从 CSS 变量取色，宣纸/暗夜双主题即适配）；附自实现 `barPaths()` 柱状路径绘制器——**uplot 1.6.32 npm 包不含官方 demo 的 paths 导出**（ESM 仅 default + costlyLerp），按 README path 协议自实现（柱宽 = 相邻 x 像素间距 × 0.6，基线 y=0）
+- 新增 `KnowledgeStockWidget.jsx`：KPI 三卡（卡片总数/双链边数/Chroma）+ 分类分布柱状图（6 档含零值）+ 新增趋势折线，7d/30d 切换；LIVE 拉取 `GET /api/stats?include=knowledge`
+- 新增 `UsageTrendWidget.jsx`：KPI（LLM 调用次数/成本估算）+ 输入/输出 tokens 双序列折线，7d/30d 切换；LIVE 拉取 `include=usage`
+- `client.js` 新增 `mockStatsFor(range)`：MOCK 模式内置演示数据（形状逐字段对齐 /api/stats 响应），toast 标识"正在显示内置演示数据"且仅提示一次（双 widget 共享防刷屏）；LIVE 掉线走既有 bridgeDown 离线态
+- `utils.js` 新增全局 toast 总线（`bindGlobalToast`/`fireToast`，App 挂载注册）——widget 处于 props 链末端拿不到 toast prop
+- registry 两个 Placeholder 换真组件（容器契约零改动）+ `app.css` ksw 系列样式；柱状图 y 轴 range 显式 `[0, max(1)]`（barPaths 基线 y=0，自适应 min 会柱子断头）
+
+### 实测
+
+- eslint / vite build 干净（前端无测试套件，项目测试全在 pytest 后端；本批后端零改动，206 test 基线不受影响）
+- 浏览器双模式验证全过：MOCK——KPI/柱状/折线渲染、7d/30d 切换、双主题图表颜色跟随、控制台零 ERROR；LIVE（b3test 账号）——真实数据 91 卡/393 双链/Chroma 80、分布 6 档正确渲染、`/api/stats` 全 200、用量真实 0 值贴底正常
+
 ## [0.19.0] - 2026-09-03
 
 ### Added（M4-B2 · 知识存量统计 + /api/stats 聚合端点）

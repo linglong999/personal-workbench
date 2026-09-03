@@ -1851,7 +1851,22 @@ M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
 - [x] **Step 3**：全量验证——**206 test 全过（+10），coverage 94.45%，ruff / mypy 干净**
 - [x] **Step 4**：review（检查表 10 条逐条过：401/422/缺省/回显/过滤/含零降序/补零与无前缀剔除/唯一边/count 直封装/纯函数+薄端点/测试全 tmp 落盘）+ CHANGELOG + 提交
 
-> **B2 执行记录（2026-09-03，206 test / coverage 94.45% / ruff、mypy 干净）：** 检查表 10 条全部有测试断言固化。实现要点：`per_day = dict.fromkeys(wanted, 0)` 保序补零；`range` 参数 shadow 内建加 `noqa: A002`（参数名即对外 query 契约，不可改名）；端点含校验约 15 行（略超 10 行红线但业务逻辑为零——纯参数解析与组装，聚合全在 stats.py/usage）；`observe_calls` 中间件对 /api/stats 照常记 tool 行（业务端点统一观测，source="stats"）。前端 B3 接入直接 fetch `/api/stats?range=7d|30d`，distribution 6 档含零值可直接渲染柱状图。
+> **B2 执行记录（2026-09-03，206 test / coverage 94.45% / ruff / mypy 干净）：** 检查表 10 条全部有测试断言固化。实现要点：`per_day = dict.fromkeys(wanted, 0)` 保序补零；`range` 参数 shadow 内建加 `noqa: A002`（参数名即对外 query 契约，不可改名）；端点含校验约 15 行（略超 10 行红线但业务逻辑为零——纯参数解析与组装，聚合全在 stats.py/usage）；`observe_calls` 中间件对 /api/stats 照常记 tool 行（业务端点统一观测，source="stats"）。前端 B3 接入直接 fetch `/api/stats?range=7d|30d`，distribution 6 档含零值可直接渲染柱状图。
+
+### M4-B3 · 前端 widget 接入（纯前端，无后端改动）
+
+- [x] **Step 1**：`npm i uplot`（1.6.32）+ 全局 toast 总线（`utils.js` 加 `bindGlobalToast`/`fireToast`，`App.jsx` 挂载时注册——widget 处于 props 链末端拿不到 toast prop）
+- [x] **Step 2**：`UPlotChart.jsx` React 封装（`src/widgets/`）——data/buildOpts/theme 变化销毁重建（uPlot 不支持热改 opts）；ResizeObserver 跟随容器宽；卸载 `destroy()`（检查表 9）；配色 `cssVar()` 从 CSS 变量取（双主题适配，主题切换触发重建重取色）；空数据 `[[],[]]` 不炸
+- [x] **Step 3**：`KnowledgeStockWidget.jsx`（KPI 3 卡：卡片总数/双链边数/Chroma + 分类分布柱状图 + 新增趋势折线，7d/30d 切换）+ `UsageTrendWidget.jsx`（KPI：调用次数/成本 + 输入/输出 tokens 双序列折线，7d/30d 切换）+ `client.js` 加 `mockStatsFor(range)`（形状对齐 /api/stats 响应，检查表 10）+ registry 占位换真组件（容器契约零改动，检查表 8）+ `app.css` ksw 系列样式
+- [x] **Step 4**：修复 uplot 导入报错 + lint/build + 浏览器双模式验证 + CHANGELOG + 提交
+
+> **B3 执行记录（2026-09-03，eslint / vite build 干净，浏览器 MOCK+LIVE 双模式验证全过）：**
+>
+> - **关键坑（uPlot paths）**：uplot 1.6.32 npm 包 ESM 入口只有 default + `costlyLerp` 导出——官方 demo 的 bars/spline 路径绘制器**不在包内**（demo 源码），`import { paths } from 'uplot'` 在 vite 预构建下直接白屏。解法：按 README path 协议自实现 `barPaths()`（柱宽 = 相邻 x 像素间距 × 0.6，基线 y=0，负值安全），纯函数约 20 行。
+> - **柱状图 y 轴基线**：barPaths 基线为 y=0，分布图 range 必须显式 `[0, max(1)]`——否则 range 自适应数据 min（如 3）时柱子从画布外断头。
+> - **MOCK 验证（演示模式）**：KPI/柱状/折线渲染正常；7d/30d 双 widget 切换正常；宣纸↔暗夜主题切换图表颜色跟随；控制台零 ERROR、零 uPlot 报错；无白屏。MOCK 提示只 toast 一次（两 widget 共享 `mockNotified` 防刷屏）。
+> - **LIVE 验证（b3test 账号）**：真实数据渲染正确——知识存量 91 卡/393 双链/Chroma 80、分布 6 档（知识卡片 82…）；用量趋势真实 0 值贴底（尚无 LLM 调用记录，属真实状态）；`GET /api/stats` 全 200；LIVE 下 7d/30d 切换正常、无离线提示。验证账号按批次惯例注册（b3test，先例 b4test）。
+> - **前端无测试套件**（项目测试全在 pytest 后端）；本批后端零改动，206 test 基线不受影响。
 
 ### M4-A · 知识存量统计（读 Vault + Chroma）
 
@@ -1873,23 +1888,23 @@ M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
 
 M4 完成标志：
 
-- [ ] Vault 知识存量可统计（卡片总数/分类分布/新增趋势/决策量）
+- [x] Vault 知识存量可统计（卡片总数/分类分布/新增趋势/决策量）（B2：stats.py + 含零值降序分布 + 前缀趋势）
 
-- [ ] Chroma 集合统计可读（collection 文档数等）
+- [x] Chroma 集合统计可读（collection 文档数等）（B2：VectorStore.count() 直封装）
 
-- [ ] 用量从内存改为 SQLite `usage_records`（重启不丢、可长期聚合）
+- [x] 用量从内存改为 SQLite `usage_records`（重启不丢、可长期聚合）（B1：双表 + 同事务快照 upsert）
 
-- [ ] `daily_usage_snapshots` 日汇总存在，7d+ 趋势不重算全表
+- [x] `daily_usage_snapshots` 日汇总存在，7d+ 趋势不重算全表（B1：快照直查 + 明细兜底）
 
-- [ ] 用量记录含 source/skill 分组字段
+- [x] 用量记录含 source/skill 分组字段（B1：skill 记 llm 行、source 记 tool 行）
 
-- [ ] bridge 聚合端点就绪（/health + `/api/stats` 单一聚合 + `/api/usage` 明细，决策 7）
+- [x] bridge 聚合端点就绪（/health + `/api/stats` 单一聚合 + `/api/usage` 明细，决策 7）（B2）
 
-- [ ] React dashboard 只 fetch 展示，展示知识量 + 用量趋势
+- [x] React dashboard 只 fetch 展示，展示知识量 + 用量趋势（B3：KnowledgeStockWidget + UsageTrendWidget，uPlot 渲染）
 
-- [ ] MOCK 模式降级 + toast 提示可用
+- [x] MOCK 模式降级 + toast 提示可用（B3：mockStatsFor + 单次 toast 标识；LIVE 掉线走既有 bridgeDown 离线态）
 
-- [ ] 语法/测试通过（沿用 M0 的 ruff/mypy/pytest 门槛）
+- [x] 语法/测试通过（沿用 M0 的 ruff/mypy/pytest 门槛）（B1/B2：206 test / coverage 94.45%；B3：eslint + vite build 干净，浏览器双模式验证）
 
 ### M4 · 已登记扩展（不丢，待后续里程碑/横切实现）
 

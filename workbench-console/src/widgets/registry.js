@@ -1,5 +1,7 @@
 import HealthWidget from './HealthWidget.jsx'
+import KnowledgeStockWidget from './KnowledgeStockWidget.jsx'
 import PlaceholderWidget from './PlaceholderWidget.jsx'
+import UsageTrendWidget from './UsageTrendWidget.jsx'
 
 /* widget 注册表：M4 接入真实数据源时在此换 component 即可，容器不动。
    契约：entry = { id, title, size: {x,y,w,h}, component, props? }；
@@ -16,15 +18,13 @@ export const REGISTRY = [
     id: 'knowledge-stock',
     title: '知识存量',
     size: { x: 3, y: 0, w: 4, h: 3 },
-    component: PlaceholderWidget,
-    props: { hint: '知识卡片数量 / 分类分布（Vault + Chroma 统计）' },
+    component: KnowledgeStockWidget,
   },
   {
     id: 'usage-trend',
     title: '用量趋势',
     size: { x: 7, y: 0, w: 5, h: 3 },
-    component: PlaceholderWidget,
-    props: { hint: 'token 消耗与成本的时间趋势（usage_records 聚合端点）' },
+    component: UsageTrendWidget,
   },
   {
     id: 'external-feed',

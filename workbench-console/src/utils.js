@@ -19,6 +19,16 @@ export function bridgeDown(toast) {
   }, 8000)
 }
 
+/* 全局 toast 总线：App 挂载时把 toast 回调注册进来；widget（props 链拿不到
+   toast）用 fireToast 发通知。未注册（理论上不会）则静默丢弃。 */
+let globalToast = null
+export function bindGlobalToast(fn) {
+  globalToast = fn
+}
+export function fireToast(msg, dur) {
+  if (globalToast) globalToast(msg, dur)
+}
+
 /* 点任何知识实体：有 obsidian_uri → 唤起 Obsidian 打开原笔记；MOCK → 提示切 LIVE。
    嵌入式预览浏览器会静默拦截外部协议，toast 始终附带路径与出路。返回是否已处理。 */
 export function openNote(item, absPath, { mode, toast }) {
