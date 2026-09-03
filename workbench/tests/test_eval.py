@@ -43,8 +43,9 @@ def happy_case():
         expect={
             "status": "done",
             "output": {"label": "决策", "written": True},
-            # M2-B1：草稿 → recall 候选 → link → confirm → 写入 → recall 收尾
-            "tools": ["classify", "decision", "action", "recall", "link", "action", "recall"],
+            # M3-B1：recall(历史参照) → decision(带参照) → action 草稿 → recall 候选
+            # → link → confirm → 写入 → recall 收尾
+            "tools": ["classify", "recall", "decision", "action", "recall", "link", "action", "recall"],
         },
     )
 

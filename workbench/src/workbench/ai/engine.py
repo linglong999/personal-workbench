@@ -17,25 +17,46 @@ class AIEngine:
         )
         return self.llm.complete(system, text)
 
-    def analyze_decision(self, text: str) -> dict:
-        """决策层：结构化追问 + 多维分析。返回 question/dimensions/options/clarify/lean/confidence。"""
+    def analyze_decision(self, text: str, history: list[dict] | None = None) -> dict:
+        """决策层：结构化追问 + 多维分析 + 历史参照对照（M3-B1）。
+
+        返回 question/dimensions/options/clarify/lean/history_view/confidence。
+        history 来自 recall（R1 单向依赖）：只消费不检索。注入为结构化摘要
+        （标题+200 字截断+score，非全文——与 judge_link 同款喂料边界：成本
+        上界 + 近全卡误判）；反结果偏误（决策 5/6）：prompt 指令式区分
+        "决策过程质量"与"结果好坏"，结果未知的参照不强行判断。
+        """
         system = (
             "你是决策分析助手，服务于个人知识工作流的决策层。对用户输入做结构化分析与追问，"
             '只输出 JSON：{"question": "提炼的核心决策问题（一句话）", '
             '"dimensions": ["需权衡的关键维度，2-4 个"], '
             '"options": [{"name": "方案名", "pros": "优势", "cons": "代价或风险"}], '
             '"clarify": ["信息不足时待向用户追问的问题"], '
-            '"lean": "基于已有信息的倾向与理由；信息不足则留空", "confidence": 0.0}。'
+            '"lean": "基于已有信息的倾向与理由；信息不足则留空", '
+            '"history_view": "历史参照对照：每条写当时怎么定、结果如何、为何成败，'
+            "并对比当前与历史条件的差异；无历史参照或不相关则留空\", "
+            '"confidence": 0.0}。'
             "confidence 反映信息充分度：缺少关键信息时给低于 0.6 的值，并在 clarify 里列出待澄清问题；"
             "信息足够时给 0.6-1.0 并给出 lean。"
+            "对照历史参照时严格区分决策过程质量与结果好坏：结果好可能只是运气，"
+            "结果差也可能决策逻辑正确，不得因结果好坏高估或否定当时的决策逻辑；"
+            "结果未知的参照不要强行判断好坏。"
         )
-        raw = self.llm.complete(system, text)
+        user = text
+        if history:
+            user = f"{text}\n\n历史参照（用户过去的相关决策，按相似度递减）：\n" + "\n".join(
+                f"{i}. 标题：{h.get('title', '')}（相似度 {h.get('score', '')}）\n"
+                f"   摘要：{str(h.get('content', ''))[:200]}"
+                for i, h in enumerate(history, 1)
+            )
+        raw = self.llm.complete(system, user)
         defaults: dict = {
             "question": raw if raw else "",
             "dimensions": [],
             "options": [],
             "clarify": [],
             "lean": "",
+            "history_view": "",
             "confidence": 0.0,
         }
         data = self._parse_json(raw)

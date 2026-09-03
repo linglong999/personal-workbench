@@ -133,14 +133,16 @@ def test_judge_link_non_bool_link_to_defaults_no_link():
 
 
 class PromptCaptureLLM:
-    """记录 user prompt——断言 judge_link 的喂料边界（标题+摘要+score，不喂全文）。"""
+    """记录 system/user prompt——断言喂料边界与 prompt 措辞（judge_link / analyze_decision）。"""
 
     def __init__(self, response):
         self.response = response
         self.user = ""
+        self.system = ""
 
     def complete(self, system, user):
         self.user = user
+        self.system = system
         return self.response
 
 
@@ -154,3 +156,50 @@ def test_judge_link_feeds_bounded_summary_not_full_text():
     assert "0.8" in llm.user  # score 进 prompt 供 LLM 校准
     assert "很" * 201 not in llm.user  # 新笔记全文不进 prompt（截断为摘要）
     assert "贵" * 201 not in llm.user  # 候选全文不进 prompt
+
+
+# ═══════════ M3-B1 · analyze_decision 历史参照注入（R1 只消费 + 反结果偏误）═══════════
+
+HISTORY = [
+    {"id": "n1", "title": "上次选B的决策", "content": "很" * 600, "score": 0.82},
+    {"id": "n2", "title": "外包还是自研", "content": "贵" * 600, "score": 0.76},
+]
+
+
+def test_analyze_decision_history_injects_bounded_summary_not_full_text():
+    """M3-B：参照注入为结构化摘要（标题+200字截断+score），非全文——
+    成本上界，与 judge_link 同款喂料边界；按相似度递减保序注入。"""
+    llm = PromptCaptureLLM(DECISION_JSON)
+    engine = AIEngine(llm)
+    engine.analyze_decision("先做哪个", HISTORY)
+    assert "上次选B的决策" in llm.user  # 标题进 prompt
+    assert "0.82" in llm.user  # score 进 prompt（展示维度，不作排序依据）
+    assert llm.user.index("上次选B的决策") < llm.user.index("外包还是自研")  # 保序：相似度递减
+    assert "很" * 201 not in llm.user  # 历史卡全文不进 prompt（截断为摘要）
+    assert "贵" * 201 not in llm.user
+
+
+def test_analyze_decision_without_history_no_block():
+    """无历史参照（M1 旧路径 / 召回落空）：user prompt 就是原文，不产生空参照块。"""
+    llm = PromptCaptureLLM(DECISION_JSON)
+    engine = AIEngine(llm)
+    engine.analyze_decision("先做哪个")
+    assert llm.user == "先做哪个"
+    assert "历史参照" not in llm.user
+
+
+def test_analyze_decision_prompt_anti_outcome_bias():
+    """反结果偏误（决策 5/6）：prompt 指令式区分决策过程质量与结果好坏。"""
+    llm = PromptCaptureLLM(DECISION_JSON)
+    engine = AIEngine(llm)
+    engine.analyze_decision("先做哪个", HISTORY)
+    assert "决策过程" in llm.system  # 过程质量与结果好坏分开评估
+    assert "运气" in llm.system  # 结果好可能只是运气
+    assert "未知" in llm.system  # 结果未知的参照不强行判断好坏
+
+
+def test_analyze_decision_history_view_default_on_shape_miss():
+    # 输出契约扩 history_view：残缺 JSON 按字段兜底，不 KeyError
+    engine = AIEngine(StubLLM('{"confidence": 0.9}'))
+    analysis = engine.analyze_decision("先做哪个", HISTORY)
+    assert analysis["history_view"] == ""

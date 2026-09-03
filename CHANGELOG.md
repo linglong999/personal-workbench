@@ -2,6 +2,29 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.16.0] - 2026-09-03
+
+### Added（M3-B1 · 决策带历史参照）
+
+- `engine.analyze_decision(text, history)`：历史参照注入为**结构化摘要**（标题+200 字截断+score，非全文——与 judge_link 同款喂料边界：成本上界 + 近全卡误判），按相似度递减保序；输出契约扩 `history_view`（历史对照栏，残缺 JSON 按字段兜底）
+- **反结果偏误 prompt**（决策 5/6）：system 指令式区分"决策过程质量"与"结果好坏"——结果好可能只是运气、结果差也可能决策逻辑正确、结果未知的参照不强行判断
+- `ai/skills/decision.py`：接收主管传入的 `args.history` 透传 engine（R1 单向依赖：decision 只消费 recall 结果，不自己检索）；历史 score 仅作展示维度，不作排序/过滤键（决策 7）
+- recall 三档用途统一为 `args.purpose` 键（history=决策参照 / candidates=双链候选 / finish=收尾），互不串档；缺省视作 candidates 兼容无标志旧步
+
+### Changed（决策流编排）
+
+- 编排后序列（决策流）：classify → **recall(purpose=history, top_k=3)** → decision(带参照) → action 草稿 → recall(candidates) → link → [confirm] → 写入 → recall(finish) 收尾——历史召回是决策链专属，实践/复盘流不受影响
+- `EngineLike` 协议与 `CaseEngine` 签名同步扩 `history` 参数
+- golden case 2 个序列更新（decision_confirm_approve / decision_low_conf_judgement_reject），回归=固化新编排
+
+### 已知限制（评测水位=选项 1 约定）
+
+- `case_from_trace` 回流的 `script.related` 为 last-wins（收尾档覆盖）——回放时三档 recall 复用同一份结果；M2 起既有语义非本批回归，精确复现历史参照需人工校对 script（M5+ 评测水位提升时改进）
+
+### 实测
+
+- 167 test 全过（+14：test_policy.py 新建 8 个路由测试 + engine 注入/反偏误 4 + decision 透传 2），coverage 94.19%（policy.py、engine.py、skills 包均 100%），ruff / mypy 干净（30 源文件）
+
 ## [0.15.0] - 2026-09-03
 
 ### Added（M2-B2 · hash 增量索引）

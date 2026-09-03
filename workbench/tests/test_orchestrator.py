@@ -38,11 +38,13 @@ class ScriptedEngine:
         self.draft = draft if draft is not None else MEMO_DRAFT
         self.judge = judge if judge is not None else {"link_to": True, "confidence": 0.8}
         self.judge_calls: list[str] = []
+        self.history_calls: list[list] = []
 
     def classify(self, text):
         return self.label
 
-    def analyze_decision(self, text):
+    def analyze_decision(self, text, history=None):
+        self.history_calls.append(list(history or []))
         return self.analysis
 
     def draft_note(self, kind, text):
@@ -149,12 +151,21 @@ def test_decision_full_flow_with_confirm_and_recall(tmp_path):
 
     names = [e.event for e in orch.events]
     assert names == [
-        "ingest", "act", "step", "step", "step", "step", "step",
+        "ingest", "act", "step", "step", "step", "step", "step", "step",
         "interrupt", "resume", "step", "step", "finish",
     ]
     tools = [e.tool for e in orch.events if e.event == "step"]
-    # M2-B1 编排：action 草稿 → recall 候选 → link 决策 → confirm → action(confirmed, links) → recall 收尾
-    assert tools == ["classify", "decision", "action", "recall", "link", "action", "recall"]
+    # M3-B1 编排：recall(历史参照) → decision(带参照) → action 草稿 → recall 候选
+    # → link 分流 → confirm → action(confirmed, links) → recall 收尾
+    assert tools == ["classify", "recall", "decision", "action", "recall", "link", "action", "recall"]
+
+
+def test_decision_receives_history_reference(tmp_path):
+    """M3-B1（R1）：历史参照召回的结果注入 decision——只消费，不自己检索。"""
+    engine = ScriptedEngine()
+    orch = make_orch(tmp_path, engine=engine)
+    orch.run("选A还是B")
+    assert engine.history_calls and engine.history_calls[0][0]["title"] == "相关经验"
 
 
 def test_confirm_payload_carries_pending_review(tmp_path):

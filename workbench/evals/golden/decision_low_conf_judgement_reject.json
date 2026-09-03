@@ -19,7 +19,7 @@
  "expect": {
   "status": "done",
   "output": {"label": "决策", "written": false, "user_rejected": true},
-  "tools": ["classify", "decision", "recall"],
-  "events": ["ingest", "act", "step", "step", "interrupt", "resume", "step", "finish"]
+  "tools": ["classify", "recall", "decision", "recall"],
+  "events": ["ingest", "act", "step", "step", "step", "interrupt", "resume", "step", "finish"]
  }
 }

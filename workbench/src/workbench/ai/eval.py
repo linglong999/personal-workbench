@@ -36,7 +36,7 @@ class CaseEngine:
     def classify(self, text: str) -> str:
         return str(self.script.get("label", "决策"))
 
-    def analyze_decision(self, text: str) -> dict:
+    def analyze_decision(self, text: str, history: list[dict] | None = None) -> dict:
         return dict(self.script.get("analysis") or DEFAULT_ANALYSIS)
 
     def draft_note(self, kind: str, text: str) -> dict:

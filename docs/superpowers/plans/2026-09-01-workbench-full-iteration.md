@@ -1137,6 +1137,7 @@ import PlaceholderWidget from '../widgets/PlaceholderWidget.jsx'
 - [x] 布局仍自动保存（与 B3 一致）
 
 > **B5 执行记录（2026-09-02，build ✓ / lint 0 error / 浏览器验收全 PASS）：**
+>
 > 1. **健康灯接真实数据源**（与计划模板「纯空壳」有意不同，源自用户拍板的 B5 范围「+ 服务健康灯」）：`/api/health` 是免鉴权本地端点（ADR 例外清单），HealthWidget 轮询 30s + ↻ 手动探活，绿=在线/红=离线——M0-B5 唯一真实数据 widget，验证容器框架 fetch→render→refresh 全链路（Bridge 访问日志证实周期性 GET /api/health）。
 > 2. **挂载位 = 用量视图**（M4 统计承接位）：`WidgetGrid` 渲染注册表 4 项——服务健康（真实）+ 知识存量/用量趋势/外部数据（占位，hint 注明 M4 接入什么，不造假数据）。计划模板的「其它视图也包成 widget」**未执行**：GridShell 约定 item 内容静态（B3），而视图内容动态（state 驱动），强行包裹违反集成约定；widget 定位是 M4 数据图表（M4-B 依赖项），非重构既有视图。
 > 3. **契约**：registry entry = `{id, title, size, component, props?}`（数组保序，默认布局即数组序）；component 接收 `{tick, cfg}`——tick 由面板 ↻ bump 注入（手动刷新），cfg=entry.props。M4 接入时只换 component，容器不动。Widget.jsx 只做外壳（头部/手柄/↻/内容区），不自带 `.grid-stack-item`（GridShell 职责，B3 约定）。
@@ -1359,27 +1360,31 @@ def get_skill(name: str) -> Skill: ...
 
 M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收：
 
-| 批次 | 范围 | 关键产出 |
-| --- | --- | --- |
-| **M1-B1** | Skill 基础设施 + 3 迁移 Skill | `ai/skills/` 包（base/registry + classify/review/recall），等价测试证迁移无回归 |
-| **M1-B2** | 2 新 Skill（decision/action） | TDD 红转绿；prompt 按六层文档设计（决策层/实践层） |
-| **M1-B3** | ReAct 主管 + 状态机 | 六状态图 + 三类 interrupt + resume + 守护（max_steps/budget/human_wait_timeout） |
-| **M1-B4** | Trace + eval runner | domain event 落 TraceStore（回放/归因）+ golden case runner + 坏例回流 |
-| **M1-B5** | Bridge 接线收口 | `POST /api/orchestrate` 主管入口 + agents.py 退役；前端接入范围届时与用户确认 |
+| 批次        | 范围                         | 关键产出                                                                      |
+| --------- | -------------------------- | ------------------------------------------------------------------------- |
+| **M1-B1** | Skill 基础设施 + 3 迁移 Skill    | `ai/skills/` 包（base/registry + classify/review/recall），等价测试证迁移无回归         |
+| **M1-B2** | 2 新 Skill（decision/action） | TDD 红转绿；prompt 按六层文档设计（决策层/实践层）                                           |
+| **M1-B3** | ReAct 主管 + 状态机             | 六状态图 + 三类 interrupt + resume + 守护（max\_steps/budget/human\_wait\_timeout） |
+| **M1-B4** | Trace + eval runner        | domain event 落 TraceStore（回放/归因）+ golden case runner + 坏例回流               |
+| **M1-B5** | Bridge 接线收口                | `POST /api/orchestrate` 主管入口 + agents.py 退役；前端接入范围届时与用户确认                 |
 
 ### M1-B1 · Skill 基础设施 + 3 迁移 Skill（逐任务 TDD）
 
 - [x] **Step 1（红）**：`tests/test_skills.py` 先写三类断言——
-  1. 注册表：3 个迁移 Skill 按名可取（B2 后补齐 5）；未知名抛 KeyError；实例满足 Skill 协议（name/description/requires_confirmation/run）
+  1. 注册表：3 个迁移 Skill 按名可取（B2 后补齐 5）；未知名抛 KeyError；实例满足 Skill 协议（name/description/requires\_confirmation/run）
   2. 等价迁移：同一 fake 输入下 `Skill.run` 输出 == 现有 Agent 输出（classify≈ClassifierAgent / review≈ReviewerAgent / recall≈CoachAgent）——迁移无回归的机制化证明
   3. 3 个迁移 Skill `requires_confirmation=False`（默认自主，对齐 M1-C interrupt 映射）
+
 - [x] **Step 2（绿）**：`src/workbench/ai/skills/`——`base.py`（Skill Protocol + SkillContext + SkillResult）、`classify.py` / `review.py` / `recall.py`（逻辑迁自 agents；agents.py 不动保 bridge 兼容，B5 退役）、`registry.py`（REGISTRY 单向调度入口）
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破——新代码须被等价测试全覆盖）
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破——新代码须被等价测试全覆盖）
+
 - [x] **Step 4**：CHANGELOG + commit
 
 > **B1 执行记录（2026-09-02，49 test / coverage 87.06% / ruff、mypy 干净）：**
+>
 > 1. **等价迁移**：skill 与 agent 在同一 fake 输入下输出逐字段相等——等价测试常驻回归（若 agent 逻辑漂移会立刻被抓）。3 个迁移 Skill 均 `requires_confirmation=False`（M1-C：classify/review/recall 高置信默认自主）。
-> 2. **测试修正一处**（非实现 bug）：review 等价测试初版照抄 test_ai 的「孤决策 in 消息」断言，但 test_ai 用的是硬编码 fake（返回「决策备忘/孤决策 缺少关联问题」）；真实 `read_all_notes` 返回笔记**内容**，消息为「{内容} 缺少关联问题」。等价断言本身一次通过。此发现顺带揭示：engine.check_closed_loop 的消息以内容为标识，可读性差——登记为 M3 决策深化时顺手改（消息带文件名）。
+> 2. **测试修正一处**（非实现 bug）：review 等价测试初版照抄 test\_ai 的「孤决策 in 消息」断言，但 test\_ai 用的是硬编码 fake（返回「决策备忘/孤决策 缺少关联问题」）；真实 `read_all_notes` 返回笔记**内容**，消息为「{内容} 缺少关联问题」。等价断言本身一次通过。此发现顺带揭示：engine.check\_closed\_loop 的消息以内容为标识，可读性差——登记为 M3 决策深化时顺手改（消息带文件名）。
 > 3. **架构对齐**：skills 落位 `ai/skills/`（ADR-0001 D1 模块图 ai 含 Skill，单向依赖 knowledge）；`SkillResult.confidence` 默认 1.0，为 B2 decision 低置信、B3 主管判 interrupt 预留。
 
 ### M1-B2 · 2 新 Skill（decision/action）（逐任务 TDD）
@@ -1389,17 +1394,23 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 
 - [x] **Step 1（红）**：`tests/test_skills.py` 扩写 + `tests/test_ai.py` 补引擎边界测试——
   1. 注册表扩到 5（decision/action 入表）；协议标志：action `requires_confirmation=True`，其余 4 个 False
-  2. decision：高置信 happy（options/lean/clarify 透传，needs_judgement=False）；低置信 → needs_judgement=True（拍板标记）；confidence 非法值按 0.0 处理（LLM 边界防御）
-  3. action：未确认 run **零副作用且幂等**（重复调用不写库，status=needs_confirmation 且带预览）；确认后写决策备忘（正文含「关联问题」——review 闭环契约）与待办（正文含「次日跟进」）
+  2. decision：高置信 happy（options/lean/clarify 透传，needs\_judgement=False）；低置信 → needs\_judgement=True（拍板标记）；confidence 非法值按 0.0 处理（LLM 边界防御）
+  3. action：未确认 run **零副作用且幂等**（重复调用不写库，status=needs\_confirmation 且带预览）；确认后写决策备忘（正文含「关联问题」——review 闭环契约）与待办（正文含「次日跟进」）
   4. engine 新方法 `analyze_decision`/`draft_note`（决策层/实践层 prompt）：FakeLLM 测 JSON 边界（合法/非法 JSON/非 dict 三态回退）
+
 - [x] **Step 2（绿）**：`engine.py` 补两方法（prompt 按六层文档的决策层/实践层措辞，JSON 解析+回退）；`ai/skills/decision.py`、`ai/skills/action.py`；registry 扩 5
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破）
+
 - [x] **Step 4**：review（用户批内指令）+ CHANGELOG + commit
 
 > **B2 执行记录（2026-09-02，64 test / coverage 89.11%（engine、skills 包均 100%）/ ruff、mypy 干净）：**
+>
 > 1. **TDD 红**：12 failed（registry 5 项 + decision 3 + action 3 + engine 5 方法缺失）→ 绿。
 > 2. **review 抓到两个真 bug（均已修 + 补测试）**：
->    - **「待办」撞 Vault 白名单**：`VaultStore.ALLOWED_FOLDERS` 不含「待办」，确认写入必 ValueError——初版测试用 RecordingVault 假仓库测不出来（fake 太松）。修复：action 显式 `KIND_FOLDERS` 映射（待办→行动记录，六层框架实践层目录）+ 未知 kind 入口即拒（不论确认与否）；测试改用**真 VaultStore**（tmp_path 落盘），白名单契约进入测试防线。
+>
+>    - **「待办」撞 Vault 白名单**：`VaultStore.ALLOWED_FOLDERS` 不含「待办」，确认写入必 ValueError——初版测试用 RecordingVault 假仓库测不出来（fake 太松）。修复：action 显式 `KIND_FOLDERS` 映射（待办→行动记录，六层框架实践层目录）+ 未知 kind 入口即拒（不论确认与否）；测试改用**真 VaultStore**（tmp\_path 落盘），白名单契约进入测试防线。
+>
 >    - **合法 JSON 字段残缺 → KeyError**：LLM 返回 `{"confidence": 0.9}` 这类残缺结构时 `analysis["options"]`/`draft["title"]` 直接崩。修复：engine 改 defaults 合并（`{**defaults, **data}`），已有字段透传、残缺字段兜底；补 2 个 shape-miss 测试。LLM 是系统边界，残缺 JSON 是比非法 JSON 更常见的失败模式。
 > 3. **顺手关闭存量覆盖缺口**：`AIEngine.check_closed_loop` 循环体（63-67 行）此前所有测试都用 FakeEngine 绕过、真 engine 这段规则逻辑零直测——补 1 测，engine.py 至 100%。
 > 4. **契约落点**：decision 输出 `needs_judgement`（<0.6）+ clarify（B3 映射 disambiguate/judgement）；action 未确认零副作用（幂等）+ 预览带起草内容（B3 confirm interrupt 直接可展示）；决策备忘正文含「关联问题」（review 闭环契约）、待办正文含「次日跟进」（跟进信号落在正文，不另立文件夹）。
@@ -1409,58 +1420,67 @@ M1 体量约等于 M0 全里程碑，按 M0 惯例分 5 批执行、批批验收
 
 > **设计落地（兑现 M1-A/B 骨架，2026-09-02 补写）：** `ai/policy.py`（策略=主管的"想"）+ `ai/orchestrator.py`（状态机=主管的"行"）。M1 策略为**确定性规则路由**（ReAct 框架先立、Thought 为规则；LLM 自由规划留 M5+ 评测水位后）——保证可测、可回放。
 > **recall 收尾：** 每个流程以 recall 结束并把结果附在 Finish 输出（"带着经验回来"）——B5 退役 agents.py 后主管必须承接召回职责，否则召回能力随退役消失。
-> **human_wait_timeout 语义：** 超时按"放弃"→DONE（非 ERROR；对齐状态表"放弃→DONE"，且此时无副作用，安全）。
+> **human\_wait\_timeout 语义：** 超时按"放弃"→DONE（非 ERROR；对齐状态表"放弃→DONE"，且此时无副作用，安全）。
 > **resume 安全默认：** 非 approve 的裁决一律不触发写库（宁可不写，不可误写）。
 
 - [x] **Step 1（红）**：`tests/test_orchestrator.py` ——
   1. 决策 happy path 全链：classify→decision→action 草稿→confirm interrupt→resume approve→written→recall→finish；断言 TurnResult、Vault 落盘（1 张备忘）、事件名序列与 tool 序列
   2. 三类 interrupt：judgement（低置信；approve 继续 / reject 不写库）、confirm（reject / 非法 action 均不写库——安全默认）、disambiguate（未知标签→候选五类→pick 路由；无效 pick 结束）
-  3. abandon：等待中放弃→DONE 不写库；human_wait_timeout：超时→DONE（放弃语义）+ 未超时正常 resume
-  4. 守护：max_steps（LoopPolicy 循环策略）/ budget（自动推进假钟）/ 空输入→ERROR / 技能异常→ERROR / 策略异常→ERROR / 非法 resume 与运行中重入→RuntimeError
-  5. 事件链完整性：相邻事件 state_to==state_from、首事件自 IDLE、末事件至 DONE/ERROR；DONE 后重开新回合（DONE→INGEST，轨迹清零）
-- [x] **Step 2（绿）**：`ai/policy.py`（RunSkill/Interrupt/Finish 指令 + RunView 轨迹视图 + RulePolicy 五类路由）+ `ai/orchestrator.py`（六状态 + 每跳 DomainEvent + 主管级 interrupt 接线（action needs_confirmation→confirm；decision needs_judgement→judgement）+ resume + Guards 三守护）
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+  3. abandon：等待中放弃→DONE 不写库；human\_wait\_timeout：超时→DONE（放弃语义）+ 未超时正常 resume
+  4. 守护：max\_steps（LoopPolicy 循环策略）/ budget（自动推进假钟）/ 空输入→ERROR / 技能异常→ERROR / 策略异常→ERROR / 非法 resume 与运行中重入→RuntimeError
+  5. 事件链完整性：相邻事件 state\_to==state\_from、首事件自 IDLE、末事件至 DONE/ERROR；DONE 后重开新回合（DONE→INGEST，轨迹清零）
+
+- [x] **Step 2（绿）**：`ai/policy.py`（RunSkill/Interrupt/Finish 指令 + RunView 轨迹视图 + RulePolicy 五类路由）+ `ai/orchestrator.py`（六状态 + 每跳 DomainEvent + 主管级 interrupt 接线（action needs\_confirmation→confirm；decision needs\_judgement→judgement）+ resume + Guards 三守护）
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破）
+
 - [x] **Step 4**：review + CHANGELOG + commit
 
-> **B3 执行记录（2026-09-02，88 test / coverage 92.00% / ruff、mypy 干净）：** 实现 ReAct 主管状态机（六状态流转）+ RulePolicy 确定性路由 + 三类 interrupt 接线 + DomainEvent 事件链；24 个测试覆盖 happy path/中断/resume/守护/事件链完整性/各标签路由。**review 抓到 1 个真 bug 并修复**：budget_seconds 计入了人机等待时间（用户思考 10 分钟后 approve 会被误判 "budget exceeded"）——守护语义是机器时间，resume 时重置计时起点；补 2 测试（budget 不计等待时间、ERROR 后重开回合——docstring 声明但未测）。另确认：`ruff format` 非项目门槛（CI 只跑 `ruff check`），存量格式漂移不动以免混批次。
+> **B3 执行记录（2026-09-02，88 test / coverage 92.00% / ruff、mypy 干净）：** 实现 ReAct 主管状态机（六状态流转）+ RulePolicy 确定性路由 + 三类 interrupt 接线 + DomainEvent 事件链；24 个测试覆盖 happy path/中断/resume/守护/事件链完整性/各标签路由。**review 抓到 1 个真 bug 并修复**：budget\_seconds 计入了人机等待时间（用户思考 10 分钟后 approve 会被误判 "budget exceeded"）——守护语义是机器时间，resume 时重置计时起点；补 2 测试（budget 不计等待时间、ERROR 后重开回合——docstring 声明但未测）。另确认：`ruff format` 非项目门槛（CI 只跑 `ruff check`），存量格式漂移不动以免混批次。
 
 ### M1-B4 · Trace + eval runner（逐任务 TDD）
 
 > **设计落地（兑现 M1-A 修正 A + 评测水位选项 1，2026-09-03 补写）：** `ai/trace.py`（观测层：TraceStore 落盘/回放/归因）+ `ai/eval.py`（最小 golden case runner + 坏例回流）。
 > **类型解耦（防循环依赖的关键）：** trace 只认 **dict**（JSON 形态的事件），不 import DomainEvent 类——orchestrator 运行时 import trace（save 时 asdict 转换），trace 零反向依赖；观测层连事件类都不知道，修正 A"trace 不是执行语义"在类型层面落实。
-> **存储格式：** 一 run 一 JSON 文件（`{run_id}.json` = meta + events）；run_id = `时间戳-短哈希`（文件名即排序键）。不用 SQLite：trace 是 append-only 时序记录，个人规模无需聚合查询（usage 走 SQLite 是 M4 聚合统计诉求，二者不同）。
-> **接线（修正 A 落实）：** Orchestrator 可选注入 `trace: TraceStore`，在进入 **WAITING_HUMAN / DONE / ERROR 三个观测点**时快照落盘（同 run_id 覆盖——resume 续写同文件，崩溃时保留上一稳定点）；**写 trace 失败静默不杀任务**（灵魂测试：ExplodingStore 抛 OSError，任务照常完成）。
-> **归因最小版：** `attribute_failure(events)` —— error 事件定位（reason + 出错前最后 tool + at_seq）+ 低置信步骤收集（阈值 import DecisionSkill.CONFIDENCE_THRESHOLD，不复制魔法数）。
+> **存储格式：** 一 run 一 JSON 文件（`{run_id}.json` = meta + events）；run\_id = `时间戳-短哈希`（文件名即排序键）。不用 SQLite：trace 是 append-only 时序记录，个人规模无需聚合查询（usage 走 SQLite 是 M4 聚合统计诉求，二者不同）。
+> **接线（修正 A 落实）：** Orchestrator 可选注入 `trace: TraceStore`，在进入 **WAITING\_HUMAN / DONE / ERROR 三个观测点**时快照落盘（同 run\_id 覆盖——resume 续写同文件，崩溃时保留上一稳定点）；**写 trace 失败静默不杀任务**（灵魂测试：ExplodingStore 抛 OSError，任务照常完成）。
+> **归因最小版：** `attribute_failure(events)` —— error 事件定位（reason + 出错前最后 tool + at\_seq）+ 低置信步骤收集（阈值 import DecisionSkill.CONFIDENCE\_THRESHOLD，不复制魔法数）。
 > **坏例回流：** `case_from_trace()` 从 trace 提取 input/script（classify 标签、decision 分析、action 草稿、review 缺失项）/resumes（interrupt 裁决序列），生成 GoldenCase——expect 从当前结果起草、人工校对为正确行为；回流产物落 `workbench/evals/golden/*.json`（一 case 一文件），`test_eval.py` 扫目录全量跑——golden case 即 CI 回归。
 
 - [x] **Step 1（红）**：`tests/test_trace.py` + `tests/test_eval.py` + `evals/golden/` 5 初始 case ——
-  1. trace：save/load roundtrip（dict 事件链 + meta）；waiting 快照 → resume 覆盖同 run_id（终态完整链）；list_runs 最新在前；重开回合新 run_id 旧文件保留；verify 好链 [] / 断链报问题；attribute_failure 定位 error 与低置信
+  1. trace：save/load roundtrip（dict 事件链 + meta）；waiting 快照 → resume 覆盖同 run\_id（终态完整链）；list\_runs 最新在前；重开回合新 run\_id 旧文件保留；verify 好链 \[] / 断链报问题；attribute\_failure 定位 error 与低置信
   2. **修正 A 灵魂测试**：ExplodingTraceStore.save 抛 OSError → 任务照常完成、笔记照常落盘、不抛异常
-  3. eval：run_case 通过/失败（failures 带原因）；judgement 双 resume 全链 case；GoldenCase JSON roundtrip；坏例回流（CaseEngine 生成 trace → case_from_trace → 重放通过=行为固化）
+  3. eval：run\_case 通过/失败（failures 带原因）；judgement 双 resume 全链 case；GoldenCase JSON roundtrip；坏例回流（CaseEngine 生成 trace → case\_from\_trace → 重放通过=行为固化）
   4. golden：`evals/golden/` 5 case（决策确认写入/低置信驳回/复盘扫描/澄清选实践/空输入 ERROR）扫目录全过——进 CI 回归
-- [x] **Step 2（绿）**：`ai/trace.py`（TraceStore/Trace/verify/attribute_failure）+ `ai/eval.py`（GoldenCase/CaseEngine/CaseVector/run_case/run_cases/case_from_trace/load_cases）+ orchestrator 接线（run_id 生成 + 观测点快照 + 静默容错）
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+
+- [x] **Step 2（绿）**：`ai/trace.py`（TraceStore/Trace/verify/attribute\_failure）+ `ai/eval.py`（GoldenCase/CaseEngine/CaseVector/run\_case/run\_cases/case\_from\_trace/load\_cases）+ orchestrator 接线（run\_id 生成 + 观测点快照 + 静默容错）
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破）
+
 - [x] **Step 4**：review + CHANGELOG + commit
 
-> **B4 执行记录（2026-09-03，117 test / coverage 93.61%（trace.py、eval.py 均 100%）/ ruff、mypy 干净）：** TraceStore（一 run 一 JSON）+ verify/attribute_failure + 最小 eval runner + 坏例回流（decision/review/实践/等待快照/ERROR 五类提取路径全测）。**review 三个发现均处置**：1) mypy 抓出 SkillContext 类型债（engine/vector 标注具体类，CaseEngine 结构兼容但类型不符）——改为 EngineLike/VectorLike 结构协议，"Skill 只从 ctx 拿能力"在类型层落实；2) 回流核心分支（decision analysis 提取去 needs_judgement、review_missing、related 脚本化、等待快照 expect）初测遗漏——补 7 测后两模块 100%；3) case.id 拼路径存在目录逃逸（外部 JSON 数据边界）——run_case 入口即拒。**无逻辑 bug**（B3 建立的模式直接复用）。类型解耦验证：trace 只认 dict 零反向依赖，无循环 import。
+> **B4 执行记录（2026-09-03，117 test / coverage 93.61%（trace.py、eval.py 均 100%）/ ruff、mypy 干净）：** TraceStore（一 run 一 JSON）+ verify/attribute\_failure + 最小 eval runner + 坏例回流（decision/review/实践/等待快照/ERROR 五类提取路径全测）。**review 三个发现均处置**：1) mypy 抓出 SkillContext 类型债（engine/vector 标注具体类，CaseEngine 结构兼容但类型不符）——改为 EngineLike/VectorLike 结构协议，"Skill 只从 ctx 拿能力"在类型层落实；2) 回流核心分支（decision analysis 提取去 needs\_judgement、review\_missing、related 脚本化、等待快照 expect）初测遗漏——补 7 测后两模块 100%；3) case.id 拼路径存在目录逃逸（外部 JSON 数据边界）——run\_case 入口即拒。**无逻辑 bug**（B3 建立的模式直接复用）。类型解耦验证：trace 只认 dict 零反向依赖，无循环 import。
 
 ### M1-B5 · Bridge 接线收口（逐任务 TDD）
 
 > **设计落地（2026-09-03 补写）：** 主管入口 + agents.py 退役；**前端接入不在本批**（按批次表约定，接入范围完成后与用户确认）。
-> **`POST /api/orchestrate`（{text} 起新回合）+ `POST /api/orchestrate/resume`（{run_id, decision} 续回合）**：Orchestrator 有状态，HTTP 无状态——bridge 持会话注册表 `_sessions: dict[run_id, Orchestrator]`；**终态（DONE/ERROR）即删**（不可 resume → 404，注册表不变式保证 resume 永不撞 RuntimeError）+ cap 50 最旧先出（防放弃等待的会话泄漏）。响应 = run_id/status/state/output/interrupt/events（asdict 全链——事件链本就是给前端渲染的观测数据）。
-> **写入即索引（产品契约补漏）：** create_note 端点写笔记后同步向量索引，但 action Skill 确认写入不索引——agent 写的笔记检索不到，召回闭环断。契约落在 **Skill 层**（所有入口一致：orchestrate/未来 MCP）：action 确认写入后 `ctx.vector.add(...)`；VectorLike 协议补 `add`，CaseVector/测试 fake 补 no-op add。
-> **agents.py 退役（等价测试使命完成）：** bridge 三端点（classify/scan/reopen）迁 skills，**响应契约不变**（前端 LIVE 模式每天在调）；main.py/mcp_server.py 迁 skills（ctx 从 dict 改 SkillContext 直传）；`ai/__init__.py` 去 agent 导出；B1 等价测试改为直接断言（agents 删除后对照对象消失，等价使命已完成）。
+> **`POST /api/orchestrate`（{text} 起新回合）+** **`POST /api/orchestrate/resume`（{run\_id, decision} 续回合）**：Orchestrator 有状态，HTTP 无状态——bridge 持会话注册表 `_sessions: dict[run_id, Orchestrator]`；**终态（DONE/ERROR）即删**（不可 resume → 404，注册表不变式保证 resume 永不撞 RuntimeError）+ cap 50 最旧先出（防放弃等待的会话泄漏）。响应 = run\_id/status/state/output/interrupt/events（asdict 全链——事件链本就是给前端渲染的观测数据）。
+> **写入即索引（产品契约补漏）：** create\_note 端点写笔记后同步向量索引，但 action Skill 确认写入不索引——agent 写的笔记检索不到，召回闭环断。契约落在 **Skill 层**（所有入口一致：orchestrate/未来 MCP）：action 确认写入后 `ctx.vector.add(...)`；VectorLike 协议补 `add`，CaseVector/测试 fake 补 no-op add。
+> **agents.py 退役（等价测试使命完成）：** bridge 三端点（classify/scan/reopen）迁 skills，**响应契约不变**（前端 LIVE 模式每天在调）；main.py/mcp\_server.py 迁 skills（ctx 从 dict 改 SkillContext 直传）；`ai/__init__.py` 去 agent 导出；B1 等价测试改为直接断言（agents 删除后对照对象消失，等价使命已完成）。
 > **TraceStore 接线：** bridge `.data/traces`（.data 已 gitignore）；测试 monkeypatch `bridge.skill_ctx`/`bridge.trace_store`（CaseEngine 脚本化，不碰真 LLM/Vault）。
 
-- [x] **Step 1（红）**：`tests/test_bridge_orchestrate.py`（新）+ `tests/test_bridge_endpoints.py` 改写 + `tests/helpers.py`（ScriptEngine/fake_skill_ctx/FakeVault.read_all_notes）+ `tests/test_skills.py`（去 agent 等价改直接断言；FakeVector 补 add 记录器；action 确认写入补**索引断言**）+ `tests/test_ai.py`（删 2 个 agent 测试）+ `tests/test_orchestrator.py`/`test_mcp_server.py`（fake/入参适配）——
-  1. orchestrate：无 token 401；happy path（waiting_human + confirm interrupt + run_id → resume approve → done written + Vault 落盘 1 张 + trace 落盘）；resume reject → done 不写；resume 未知 run_id → 404；终态后再 resume → 404；空输入 → 200 + status=error（回合错误是数据不是传输错误）
-  2. 三旧端点：monkeypatch skill_ctx 后响应契约不变（label/missing/results）
+- [x] **Step 1（红）**：`tests/test_bridge_orchestrate.py`（新）+ `tests/test_bridge_endpoints.py` 改写 + `tests/helpers.py`（ScriptEngine/fake\_skill\_ctx/FakeVault.read\_all\_notes）+ `tests/test_skills.py`（去 agent 等价改直接断言；FakeVector 补 add 记录器；action 确认写入补**索引断言**）+ `tests/test_ai.py`（删 2 个 agent 测试）+ `tests/test_orchestrator.py`/`test_mcp_server.py`（fake/入参适配）——
+  1. orchestrate：无 token 401；happy path（waiting\_human + confirm interrupt + run\_id → resume approve → done written + Vault 落盘 1 张 + trace 落盘）；resume reject → done 不写；resume 未知 run\_id → 404；终态后再 resume → 404；空输入 → 200 + status=error（回合错误是数据不是传输错误）
+  2. 三旧端点：monkeypatch skill\_ctx 后响应契约不变（label/missing/results）
   3. action 索引契约：确认写入 → vector.add(title, content, path) 被调用（红：现未实现）
-- [x] **Step 2（绿）**：`bridge.py`（skill_ctx + 会话注册表 + 两新端点 + 三端点迁 skills）+ `action.py`（写入后索引）+ `base.py`（VectorLike.add）+ `eval.py`（CaseVector.add）+ `main.py`/`mcp_server.py`（迁 skills）+ `ai/__init__.py` + **删除 `agents.py`**
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+
+- [x] **Step 2（绿）**：`bridge.py`（skill\_ctx + 会话注册表 + 两新端点 + 三端点迁 skills）+ `action.py`（写入后索引）+ `base.py`（VectorLike.add）+ `eval.py`（CaseVector.add）+ `main.py`/`mcp_server.py`（迁 skills）+ `ai/__init__.py` + **删除** **`agents.py`**
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破）
+
 - [x] **Step 4**：review + CHANGELOG + commit + 与用户确认前端接入范围
 
-> **B5 执行记录（2026-09-03，123 test / coverage 93.61% / ruff、mypy 干净）：** 主管入口（orchestrate/resume + 会话注册表终态即删 + cap 50）+ agents.py 退役（bridge/main/mcp_server 全迁 skills，三旧端点响应契约不变有测试锁定）+ 写入即索引契约落 Skill 层。**review 抓到 1 个并发缺陷并修复**：FastAPI 同步 handler 跑线程池，双击 approve 的并发 resume 第二个请求撞「resume() 非法状态」RuntimeError → 500（并发 prune 还有重复删 key 的 KeyError 风险）——查表+resume+prune 整体持锁串行化，后到者 404。**M1 全部 5 批完成**；前端接入范围待用户拍板（响应已透出 events 全链，前端渲染自由度充足）。
+> **B5 执行记录（2026-09-03，123 test / coverage 93.61% / ruff、mypy 干净）：** 主管入口（orchestrate/resume + 会话注册表终态即删 + cap 50）+ agents.py 退役（bridge/main/mcp\_server 全迁 skills，三旧端点响应契约不变有测试锁定）+ 写入即索引契约落 Skill 层。**review 抓到 1 个并发缺陷并修复**：FastAPI 同步 handler 跑线程池，双击 approve 的并发 resume 第二个请求撞「resume() 非法状态」RuntimeError → 500（并发 prune 还有重复删 key 的 KeyError 风险）——查表+resume+prune 整体持锁串行化，后到者 404。**M1 全部 5 批完成**；前端接入范围待用户拍板（响应已透出 events 全链，前端渲染自由度充足）。
 
 ### M1 · 成功准则核对
 
@@ -1531,10 +1551,10 @@ M1 完成标志：
 
 M2 体量约为 M1 一半，分 2 批执行（前端接入按用户拍板攒到 M4）：
 
-| 批次 | 范围 | 关键产出 |
-| --- | --- | --- |
-| **M2-B1** | 双链管线 | link Skill（三档阈值分流）+ engine.judge\_link + action 接收 links 写入 + 主管编排 + vector.search 补 score |
-| **M2-B2** | hash 增量索引 | knowledge/indexer.py（content\_hash + sync\_vault 增量同步）+ 写卡路径带 hash + /api/sync\_vault 端点 |
+| 批次        | 范围        | 关键产出                                                                                       |
+| --------- | --------- | ------------------------------------------------------------------------------------------ |
+| **M2-B1** | 双链管线      | link Skill（三档阈值分流）+ engine.judge\_link + action 接收 links 写入 + 主管编排 + vector.search 补 score |
+| **M2-B2** | hash 增量索引 | knowledge/indexer.py（content\_hash + sync\_vault 增量同步）+ 写卡路径带 hash + /api/sync\_vault 端点   |
 
 ### M2-B1 · 写卡自动双链管线（逐任务 TDD）
 
@@ -1542,17 +1562,20 @@ M2 体量约为 M1 一半，分 2 批执行（前端接入按用户拍板攒到 
 > **link 是第 6 个 Skill（不是 policy 内部函数）：** 决策 3"该链到谁由主管编排"落在 policy 的路由顺序上（action 草稿 → recall 候选 → link 决策 → confirm → 写入），但 link 决策本身 Skill 化——天然拿 ctx.engine（LLM 边缘判断）、steps 里有记录（trace/eval 可回放）、不破坏 policy 纯函数性。
 > **主管级 interrupt 接线挪进 policy：** M2 后草稿 action 的 needs\_confirmation 不再立即触发 confirm（要先 recall+link），orchestrator 的硬编码接线（action/decision 两处）删除，全部由 policy 返回 Interrupt 指令——orchestrator 变纯执行器，policy 是唯一"想"的场所（B3 接线职责没变，位置归位）。
 > **vector.search 补 score：** Chroma cosine 距离 → score = 1 - distance；响应加字段向后兼容（前端不读即忽略）。
-> **三档语义（对齐 M2-A 管线）：** score≥0.85 auto（直接链，零 LLM）；0.75~0.85 喂 LLM（judge\_link 返回 {link\_to, confidence}，**非法 JSON/残缺默认不链**——宁可不链不可误链）；<0.75 pending\_review（不自动链，confirm 时透出给用户）。去重（同标题留最高分）+ 排除草稿正文已有的人工 [[链]]（尊重显式边）。
+> **三档语义（对齐 M2-A 管线）：** score≥0.85 auto（直接链，零 LLM）；0.75\~0.85 喂 LLM（judge\_link 返回 {link\_to, confidence}，**非法 JSON/残缺默认不链**——宁可不链不可误链）；<0.75 pending\_review（不自动链，confirm 时透出给用户）。去重（同标题留最高分）+ 排除草稿正文已有的人工 \[\[链]]（尊重显式边）。
 > **action 写入规范扩展：** args 增 `links`（auto 档标题列表）；写入时正文追加「## 关联」节渲染 `[[标题]]`；正文已有人工链不重复；无 links 不加节。confirm interrupt payload 扩为 {preview, links, pending\_review}。
-> **编排后序列（决策流）：** classify → decision → action 草稿 → recall(top\_k=20) → link → [confirm] → approve → action(confirmed, links) → recall(收尾)。存量 golden case / orchestrator 测试的 tools 序列全部更新（预期内行为变更）。
+> **编排后序列（决策流）：** classify → decision → action 草稿 → recall(top\_k=20) → link → \[confirm] → approve → action(confirmed, links) → recall(收尾)。存量 golden case / orchestrator 测试的 tools 序列全部更新（预期内行为变更）。
 
 - [x] **Step 1（红）**：`tests/test_skills.py`（link 三档/去重/人工链排除/judge\_link 边界；action links 渲染/无 links 不加节/人工链去重；注册表 6）+ `tests/test_ai.py`（engine.judge\_link JSON 三态：合法/非法→不链/残缺→默认）+ `tests/test_vector.py`（search 返回 score）+ `tests/test_orchestrator.py`（新序列 + confirm payload 含 links + 驳回不写不变）+ `evals/golden/` 5 case 序列更新 ——
-  1. link：三档分流（0.9→auto 零 LLM；0.8→走 judge\_link，approve→链 / reject→不链；0.6→pending\_review）；同标题去重留最高分；草稿已有 [[X]] 则 X 排除
-  2. action：links=[A,B] → 正文含「## 关联」+ [[A]] + [[B]]；正文已有 [[A]] → A 不重复；links 空/缺 → 无关联节
+  1. link：三档分流（0.9→auto 零 LLM；0.8→走 judge\_link，approve→链 / reject→不链；0.6→pending\_review）；同标题去重留最高分；草稿已有 \[\[X]] 则 X 排除
+  2. action：links=\[A,B] → 正文含「## 关联」+ \[\[A]] + \[\[B]]；正文已有 \[\[A]] → A 不重复；links 空/缺 → 无关联节
   3. 编排：决策 happy path 全链序列（含 recall+link）；confirm payload 带 links/pending\_review；驳回仍零写入；judgement 双 interrupt 串行流
   4. eval：golden 序列更新后全过；回流 case（case\_from\_trace）重放通过
+
 - [x] **Step 2（绿）**：`ai/skills/link.py` + `engine.py`（judge\_link）+ `action.py`（links 渲染）+ `policy.py`（路由 + Interrupt 收编）+ `orchestrator.py`（删硬编码接线）+ `vector.py`（score）+ registry/CaseEngine/回流适配
-- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail_under=85 不许破）
+
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov（fail\_under=85 不许破）
+
 - [x] **Step 4**：review + CHANGELOG + commit
 
 > **M2-B1 执行记录（2026-09-03）：** 145 test 全过（+22），coverage 93.96%（link.py / policy.py 100%），ruff / mypy 干净。review 发现并修复 2 处缺陷：① vector.search 距离缺失兜底原为 0.0（→score=1.0 会误进 auto 档自动建链），改兜底最大距离并补回归测试；② engine.judge\_link 喂料与 M2-A 设计不符（原喂全文且不带 score），改 200 字截断摘要 + score 进 prompt 并补 PromptCapture 回归测试。存量断言修正两处：test\_skills「## 关联」改行级正则（区分「## 关联问题」契约节）；test\_vector score 绝对值断言改相对排序（本地哈希 embedding 量纲低于语义模型，不绑量纲）。
@@ -1562,11 +1585,14 @@ M2 体量约为 M1 一半，分 2 批执行（前端接入按用户拍板攒到 
 > **设计落地（2026-09-03 补写）：** `knowledge/indexer.py`——content\_hash（sha256）存 Chroma metadata；`sync_vault(vault, vector)` 扫 Vault 白名单目录，hash 命中跳过 / 变更重算 / 新增入库（upsert 语义，**不处理删除**——最小版，删除卡留全量重建）；写卡路径（action / create\_note 端点 / MCP）add 时带 content\_hash。bridge `POST /api/sync_vault`（鉴权）供首次初始化与手动重建。SyncReport{added, updated, skipped} 可观测。
 
 - [x] **Step 1（红）**：`tests/test_indexer.py`——首次 sync 全量入库；二跑全 skipped（hash 命中零重算）；改一张卡只 updated 该卡；新增卡 added；写卡路径 metadata 带 content\_hash
+
 - [x] **Step 2（绿）**：`knowledge/indexer.py` + vector.add 带 hash + 三入口接线 + bridge 端点
+
 - [x] **Step 3**：全量验证
+
 - [x] **Step 4**：review + CHANGELOG + commit
 
-> **M2-B2 执行记录（2026-09-03）：** 153 test 全过（+8），coverage 94.16%（indexer.py 100%），ruff / mypy 干净（30 源文件）。实现简化一处：hash 由 `VectorStore.add` 内部计算落 metadata（三写卡入口零改动即满足"写入即带 hash"，单点计算免三处重复）；两个关键设计约定——doc_id 与写卡路径同款 `note-{stem}`（互认不产重复条目，action 写卡后 sync 直接 skipped 有集成测试）、hash 只算正文（写卡索引真实标题、sync 从文件名剥日期前缀推标题，含标题会无限"更新"）。零重算证明走 monkeypatch 计数 upsert：二跑零次、改一张恰一次。已知限制按最小版登记：不处理删除/改名、同名 stem 跨目录遮蔽（见 CHANGELOG 0.15.0）。
+> **M2-B2 执行记录（2026-09-03）：** 153 test 全过（+8），coverage 94.16%（indexer.py 100%），ruff / mypy 干净（30 源文件）。实现简化一处：hash 由 `VectorStore.add` 内部计算落 metadata（三写卡入口零改动即满足"写入即带 hash"，单点计算免三处重复）；两个关键设计约定——doc\_id 与写卡路径同款 `note-{stem}`（互认不产重复条目，action 写卡后 sync 直接 skipped 有集成测试）、hash 只算正文（写卡索引真实标题、sync 从文件名剥日期前缀推标题，含标题会无限"更新"）。零重算证明走 monkeypatch 计数 upsert：二跑零次、改一张恰一次。已知限制按最小版登记：不处理删除/改名、同名 stem 跨目录遮蔽（见 CHANGELOG 0.15.0）。
 
 ### M2 · 成功准则核对
 
@@ -1602,7 +1628,25 @@ M2 完成标志：
 4. **存量宽松、只强新卡（M3-C）**：不强制改造存量，与 open-recall"新结构化、旧宽容"一致。
 5. **反结果偏误（业界修正，已采纳）**：初始设计曾"按 outcome 优先成功案例"；业界（Decision Journal）明确这是陷阱——**决策质量 ≠ 结果质量**（结果好可能运气，结果差可能逻辑对）。修正：注入时不按成功过滤，而是让 decision 区分"为什么成/为什么败"并对比当前与历史条件差异。
 
-> **业界核实（经 Explore 检索 decision-journal-template / adr-madr / open-recall / Metadata-Aware-Rag / git-vault-protocol 等）：** M3-A/B/C 三件套属正统主流路线。额外收获：决策记忆建议分"原文层/结构化摘要层/检索索引层"三层；检索用"metadata 过滤 + 向量召回 + 结果质量重排"（非只按成功过滤）；Chroma 支持 metadata filter（Mongo-style dict）。
+> **业界核实（经 Explore 检索 decision-journal-template / adr-madr / open-recall / Metadata-Aware-Rag / git-vault-protocol 等）：** M3-A/B/C 三件套属正统主流路线。额外收获：决策记忆建议分"原文层/结构化摘要层/检索索引层"三层；检索重排用 relevance/证据完整度/时效，**结果质量只作展示角标、绝不作排序键**（反结果偏误）；Chroma 支持 metadata filter，但过滤缺失字段会报错/漏召回——故本项目对**存量无 type 字段**的库不做硬过滤（见决策 7）。
+
+### M3 · Step 0 写码边界清单（2026-09-03 定点研究落地，写码前逐条对照）
+
+> 方案 C+A：对 M3 做过一轮定点 Explore（decision-journal-template / adr-madr / 元数据感知 RAG / 反结果偏误），产出直接灌成下面这份**检查表**。目标是"一次做对"，把 review 返工（如 M2 的距离兜底/喂料边界两处）压到最低。
+
+**用户拍板 + 研究新决策（写码必须遵守）：**
+- **决策 6（schema 口径，用户已定）**：**保持两栏** `actual_outcome + result_quality`，**不拆** `decision_quality` 栏；"决策过程质量 vs 结果好坏"的区分与反结果偏误靠 **prompt 措辞**实现，不靠加字段。
+- **决策 7（检索口径）**：`recall` **不做 metadata 硬过滤**——旧卡无 `type` 字段会漏召回（Chroma 过滤缺失字段会报错/无结果），违反"存量宽容"。一律向量全量召回后，把历史结果当作**展示维度**透出，**绝不当排序键**（规避结果偏误 + 兼容存量）。
+- **决策 8（enum 规范化）**：`actual_outcome` 只用 `success / failure / inconclusive / unknown`（缺省 `unknown`，宁缺毋猜）；`result_quality` 用 `good / medium / poor / unknown`；中文解释一律放 `*_note` 字段；日期严格 ISO 8601；含中文/冒号/特殊字符的值加引号。
+
+**检查表（每完成一项打勾）：**
+1. [ ] frontmatter 只允许文件**顶部一组** `---`；正文里的 `---`（分段/代码块）不得截断正文——解析失败时**丢 meta 不丢正文**，正文照常可读可检索
+2. [ ] enum 写死英文值、中文防引号；日期 ISO；不把自然语言写进枚举字段
+3. [ ] 新决策备忘**落盘与索引用同一份含 frontmatter 的正文**（对齐 M2 教训：index 与 disk 渲染分裂会造成无限"更新"）
+4. [ ] 结果不确定一律 `unknown`，硬盘不硬猜；"有结论 ≠ 有决策"；不因"失败/风险"等词硬映射 result 字段
+5. [ ] `recall` 不禁 metadata 硬过滤；历史结果只作展示、不作排序键
+6. [ ] prompt 显式区分"决策**过程**质量"与"结果好坏"，指令式措辞（禁止"因结果好而高估决策逻辑"、"因结果差否定过程"）
+7. [ ] 存量旧卡不强制改写字段（宽容读取、缺失→unknown），仅新卡走强 schema
 
 ### M3-A · 新决策备忘 frontmatter 结构
 
@@ -1663,7 +1707,34 @@ M3 完成标志：
 
 - [ ] 主管能编 classify→recall→decision→action 决策链路
 
-- [ ] recall 支持 metadata 过滤 + 结果质量重排（三层索引）
+- [ ] recall 全量向量召回历史参照，结构化摘要进 decision；历史结果仅作展示维度、不作排序键（决策 7，反结果偏误）
+
+### M3 执行分批（2026-09-03 补写）
+
+M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
+
+| 批次 | 范围 | 关键产出 |
+| --- | --- | --- |
+| **M3-B1** | 决策带历史参照（R1 单向依赖） | 编排后序列加 recall → `decision` args 接收 `history`；`engine.analyze_decision(text, history)` 注入结构化历史经验对照（非全文）+ 反结果偏误 prompt；`decision` 输出含"方案+历史对照+倾向" |
+| **M3-B2** | 决策备忘 frontmatter（两栏） | `draft_note` 决策备忘生成两栏 enum frontmatter（决策 8）；action 落盘与索引同源含 frontmatter（check 3）；读回解析丢 meta 不丢正文；存量宽容缺省 |
+
+### M3-B1 · 决策带历史参照（逐任务 TDD）
+
+- [x] **Step 0（check）**：核对上文 Step 0 边界清单——B1 只做"注参照"，不做 frontmatter/写库（归属 M3-B2）；recall 不做硬过滤（决策 7）
+- [x] **Step 1（红）**：`tests/test_skills.py`（decision 收 history、无 history 兼容）+ `tests/test_ai.py`（注入为 200 字截断摘要+score 保序、无 history 不产生空参照块、反结果偏误 prompt 措辞、history_view 字段兜底）+ 新增 `tests/test_policy.py`（决策流 recall(history)→decision(history) 路由 + recall 三档用途 purpose 键互不串档 + 实践流无历史召回 + 收尾档）+ `tests/test_orchestrator.py`（新序列 + decision 收到参照）+ golden 2 个决策 case 序列更新——14 失败全部指向"history 未接入"，红得正确
+- [x] **Step 2（绿）**：`ai/skills/decision.py`（args.history 透传，R1）+ `engine.py`（analyze_decision 收 history：结构化摘要注入非全文 + 反结果偏误 system 措辞 + 输出契约扩 history_view）+ `policy.py`（_decision_flow 前置 recall(history)；recall 三档用途统一为 args.purpose 键：history/candidates/finish，缺省 candidates 兼容旧步）+ `base.py` 协议 + `eval.py` CaseEngine 签名
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov——167 test 全过（+14），coverage 94.19%，ruff / mypy 干净
+- [x] **Step 4**：review（对照 check 表逐条，重点：history 注入边界/三档串档/反偏误措辞/回流 script.related 双召回覆盖语义）+ CHANGELOG + 提交
+
+> **B1 执行记录（2026-09-03，167 test / coverage 94.19% / ruff、mypy 干净）：** 决策流前置 recall(history) 注入结构化历史参照（标题+200 字截断+score 非全文）+ 反结果偏误 system 措辞 + 输出契约扩 history_view；recall 三档用途统一 args.purpose 键。**review 逐条通过、零返工**：① 注入边界——601 字全文不进 prompt 有断言，无 history 时 prompt 为原文不产生空参照块；② 三档串档——purpose 键隔离 + 旧步缺省 candidates（运行态无跨进程持久化，无兼容风险）；③ 反偏误措辞——过程/结果分开、运气、未知不强行判断三要素均有 PromptCapture 断言固化；④ 回流 script.related last-wins 为 M2 起既有语义非本批回归（回放时 decision 分析由 script 固化、link 未命中 title 安全默认不链），登记 M5+ 评测水位提升时改进。额外确认 loop 安全：decision 一次性触发、judgement reject → finish 不回环、max_steps 兜底仍在。
+
+### M3-B2 · 决策备忘 frontmatter（逐任务 TDD）
+
+- [ ] **Step 0（check）**：核对 Step 0 清单 1/2/3/4/7（frontmatter 解析边界 + enum + 落盘索引同源 + 宁缺毋猜 + 存量宽容）
+- [ ] **Step 1（红）**：`tests/test_ai.py`（draft_note 决策备忘含两栏 frontmatter、待办**不加**、enum 缺失→unknown）+ `tests/test_indexer.py`（写卡路径落盘/索引同源含 frontmatter、sync 复用不重算）+ 新增 `tests/test_frontmatter.py`（解析：正文含 `---` 不截断、解析失败丢 meta 不丢正文、存量缺字段缺省）
+- [ ] **Step 2（绿）**：`engine.py`（draft_note frontmatter）+ 新增 `ai/frontmatter.py`（编/解码两栏，含正文 `---` 边界 + 宽容读回）+ `action.py`（落盘同源 frontmatter）+ `indexer.py`（同源适配）
+- [ ] **Step 3**：全量验证
+- [ ] **Step 4**：review + CHANGELOG + 提交
 
 ***
 

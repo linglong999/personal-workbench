@@ -76,11 +76,13 @@ class Policy(Protocol):
 
 
 class RulePolicy:
-    """M1 确定性路由 + M2 双链管线：分类 → 按标签走价值环节 → recall 收尾。
+    """M1 确定性路由 + M2 双链管线 + M3 决策带历史参照：分类 → 按标签走价值环节 → recall 收尾。
 
     M2-B1 起 interrupt 全部由 policy 发出（orchestrator 纯执行器，policy 是唯一
     "想"的场所）：decision 低置信 → judgement；action 草稿 → recall 候选 → link
     分流 → confirm（payload 携带 links/pending_review）。
+    M3-B1：决策流前置 recall(history) 召回历史决策参照注入 decision（R1 只消费）。
+    recall 三档用途以 args.purpose 区分（history/candidates/finish），互不串档。
     resume 安全默认：confirm/judgement 的裁决非 approve 一律不触发写库（宁可不写，不可误写）。
     """
 
@@ -111,7 +113,18 @@ class RulePolicy:
     def _decision_flow(self, run: RunView) -> Instruction:
         d = run.latest_step("decision")
         if d is None:
-            return RunSkill("decision", {"text": run.input}, thought="决策类输入 → 结构化分析")
+            rec = self._latest_recall(run, "history")
+            if rec is None:
+                return RunSkill(
+                    "recall",
+                    {"task": run.input, "top_k": 3, "purpose": "history"},
+                    thought="决策输入 → 召回历史决策参照",
+                )
+            return RunSkill(
+                "decision",
+                {"text": run.input, "history": rec.result.get("results", [])},
+                thought="参照就绪 → 带历史经验的结构化分析",
+            )
         if d.result.get("needs_judgement"):
             res = run.resolution("judgement")
             if res is None:
@@ -140,11 +153,13 @@ class RulePolicy:
         """M2 双链管线：action 草稿 → recall 候选 → link 分流 → confirm → 写入。"""
         res = run.resolution("confirm")
         if res is None:
-            rec = self._latest_recall(run, finish=False)
+            rec = self._latest_recall(run, "candidates")
             if rec is None:
                 query = f"{out.get('title', '')}\n{out.get('content', '')}"
                 return RunSkill(
-                    "recall", {"task": query, "top_k": 20}, thought="草稿就绪 → 召回关联候选"
+                    "recall",
+                    {"task": query, "top_k": 20, "purpose": "candidates"},
+                    thought="草稿就绪 → 召回关联候选",
                 )
             link = run.latest_step("link")
             if link is None:
@@ -184,11 +199,11 @@ class RulePolicy:
 
     def _finish(self, run: RunView, output: dict) -> Instruction:
         """收尾前先 recall：把相关历史经验附在最终输出（"带着经验回来"）。"""
-        rec = self._latest_recall(run, finish=True)
+        rec = self._latest_recall(run, "finish")
         if rec is None:
             return RunSkill(
                 "recall",
-                {"task": run.input, "top_k": 3, "finish": True},
+                {"task": run.input, "top_k": 3, "purpose": "finish"},
                 thought="收尾：召回相关历史经验",
             )
         return Finish(
@@ -196,9 +211,10 @@ class RulePolicy:
         )
 
     @staticmethod
-    def _latest_recall(run: RunView, finish: bool) -> Step | None:
-        """按用途找 recall：候选召回（confirm 管线前置）与收尾召回（finish 标志）互不串档。"""
+    def _latest_recall(run: RunView, purpose: str) -> Step | None:
+        """按用途找 recall（M3-B1 起三档）：history=决策参照 / candidates=双链候选 /
+        finish=收尾——purpose 键互不串档；缺省视作 candidates（兼容无标志旧步）。"""
         for s in reversed(run.steps):
-            if s.skill == "recall" and bool(s.args.get("finish")) == finish:
+            if s.skill == "recall" and s.args.get("purpose", "candidates") == purpose:
                 return s
         return None

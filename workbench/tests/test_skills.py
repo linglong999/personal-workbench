@@ -100,8 +100,10 @@ def test_recall_skill(tmp_path):
 class FakeDecisionEngine(FakeEngine):
     def __init__(self, analysis):
         self.analysis = analysis
+        self.history_calls: list[list] = []
 
-    def analyze_decision(self, text):
+    def analyze_decision(self, text, history=None):
+        self.history_calls.append(list(history or []))
         return self.analysis
 
 
@@ -145,6 +147,26 @@ def test_decision_invalid_confidence_treated_as_zero(tmp_path):
     result = get_skill("decision").run(decision_ctx(tmp_path, analysis), {"text": "x"})
     assert result.confidence == 0.0
     assert result.output["needs_judgement"] is True  # LLM 边界：非法置信度按最低处理
+
+
+# ═══════════ M3-B1 · decision 消费历史参照（R1 单向依赖）═══════════
+
+
+def test_decision_consumes_history_from_recall(tmp_path):
+    """R1：decision 只消费 recall 传入的历史参照，自己不检索（历史结果仅展示维度）。"""
+    analysis = {"question": "q", "options": [], "clarify": [], "lean": "", "confidence": 0.85}
+    ctx = decision_ctx(tmp_path, analysis)
+    history = [{"id": "n1", "title": "上次选B", "content": "…", "score": 0.8}]
+    get_skill("decision").run(ctx, {"text": "选A还是B", "history": history})
+    assert ctx.engine.history_calls == [history]  # 原样透传给 engine
+
+
+def test_decision_without_history_passes_empty(tmp_path):
+    """无 history 兼容（M1 旧路径 / 召回落空）：engine 收空列表而非报错。"""
+    analysis = {"question": "q", "confidence": 0.85}
+    ctx = decision_ctx(tmp_path, analysis)
+    get_skill("decision").run(ctx, {"text": "选A还是B"})
+    assert ctx.engine.history_calls == [[]]
 
 
 # ═══════════ M1-B2 · action Skill（实践层：写库前 confirm）═══════════
