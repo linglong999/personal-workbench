@@ -101,6 +101,29 @@ def test_reopen_task_happy(client, tmp_path, monkeypatch):
     assert r.json()["results"][0]["title"] == "历史经验A"
 
 
+def test_sync_vault_happy(client, tmp_path, monkeypatch):
+    """M2-B2 增量同步端点：真组件 tmp 落盘（FakeVector 无 get_hash，与 test_vector 同款真 Chroma）。"""
+    from workbench.knowledge.vault import VaultStore
+    from workbench.knowledge.vector import VectorStore
+
+    vault = VaultStore(str(tmp_path / "vault"))
+    vector = VectorStore(str(tmp_path / "chroma"))
+    vault.create_note("知识卡片", "艾森豪威尔矩阵", "重要且紧急，立刻做")
+    monkeypatch.setattr("workbench.bridge.vault", vault)
+    monkeypatch.setattr("workbench.bridge.vector", vector)
+    r = client.post("/api/sync_vault", headers=_authed(monkeypatch, tmp_path))
+    assert r.status_code == 200
+    assert r.json() == {"added": 1, "updated": 0, "skipped": 0}
+    # 二跑全 skipped（hash 命中）：端到端增量语义
+    r2 = client.post("/api/sync_vault", headers=_authed(monkeypatch, tmp_path))
+    assert r2.json() == {"added": 0, "updated": 0, "skipped": 1}
+
+
+def test_sync_vault_requires_auth(client):
+    r = client.post("/api/sync_vault")
+    assert r.status_code == 401
+
+
 def test_business_endpoint_requires_auth(client, tmp_path, monkeypatch):
     """业务端点未带 token 一律 401，即使 fake 了组件（鉴权优先于逻辑）。"""
     monkeypatch.setattr("workbench.bridge.vector", FakeVector())

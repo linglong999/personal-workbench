@@ -35,6 +35,7 @@ from workbench.ai.skills.registry import get_skill
 from workbench.ai.trace import TraceStore
 from workbench.auth.service import AuthService
 from workbench.config import load_config
+from workbench.knowledge.indexer import sync_vault
 from workbench.knowledge.vault import VaultStore
 from workbench.knowledge.vector import VectorStore
 
@@ -245,6 +246,12 @@ def api_reopen(req: TaskReq, _: dict = Depends(require_auth)):
         .run(skill_ctx, {"task": req.task, "top_k": req.top_k})
         .output["results"]
     }
+
+
+@app.post("/api/sync_vault")
+def api_sync_vault(_: dict = Depends(require_auth)):
+    """M2-B2：hash 增量同步 Vault → 向量库（首次初始化/手动重建入口，SyncReport 可观测）。"""
+    return asdict(sync_vault(vault, vector))
 
 
 # ── M1-B5 主管入口：有状态回合 × 无状态 HTTP ──

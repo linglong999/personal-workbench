@@ -2,6 +2,27 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.15.0] - 2026-09-03
+
+### Added（M2-B2 · hash 增量索引）
+
+- `knowledge/indexer.py`：`sync_vault(vault, vector)` 扫 Vault 白名单目录做增量同步——content\_hash 命中跳过（零 embedding 重算）/ 变更只重算该卡 / 新增入库；`SyncReport{added, updated, skipped}` 可观测
+- **doc_id 与写卡路径同款 `note-{stem}`**：sync 与 action / create\_note 端点 / MCP 三入口互认，同一张卡不产重复条目（写卡后 sync 直接 skipped，集成测试证明）
+- `VectorStore.content_hash()`（sha256，**只算正文**）：写卡路径索引真实标题、sync 从文件名剥日期前缀推标题——hash 若含标题，同一张卡会在两种标题间无限"更新"
+- `VectorStore.add` 内部计算并落 content\_hash 进 Chroma metadata（三写卡入口零改动即满足"写入即带 hash"；旧数据无 hash 字段 → 首次 sync 自动补齐）
+- `VectorStore.get_hash(doc_id)`：增量判据读取（未索引 → None）
+- `POST /api/sync_vault`（鉴权）：首次初始化与手动重建入口，返回 SyncReport
+
+### 已知限制（最小版约定）
+
+- upsert 语义不处理删除/改名：改名产生新条目、旧条目留存（全量重建 = 清空 chroma 目录后重跑 sync）
+- 同名 stem 跨目录会互相遮蔽（`note-{stem}` 约定的既有边界，写卡路径同样存在）
+
+### 实测
+
+- 153 test 全过（+8：indexer 6 + bridge 端点 2），coverage 94.16%（indexer.py 100%），ruff / mypy 干净（30 源文件）
+- 零重算证明：monkeypatch 计数 upsert——二跑 sync 零次 upsert；改一张卡恰一次 upsert
+
 ## [0.14.0] - 2026-09-03
 
 ### Added（M2-B1 · 写卡自动双链管线）

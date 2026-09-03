@@ -1561,10 +1561,12 @@ M2 体量约为 M1 一半，分 2 批执行（前端接入按用户拍板攒到 
 
 > **设计落地（2026-09-03 补写）：** `knowledge/indexer.py`——content\_hash（sha256）存 Chroma metadata；`sync_vault(vault, vector)` 扫 Vault 白名单目录，hash 命中跳过 / 变更重算 / 新增入库（upsert 语义，**不处理删除**——最小版，删除卡留全量重建）；写卡路径（action / create\_note 端点 / MCP）add 时带 content\_hash。bridge `POST /api/sync_vault`（鉴权）供首次初始化与手动重建。SyncReport{added, updated, skipped} 可观测。
 
-- [ ] **Step 1（红）**：`tests/test_indexer.py`——首次 sync 全量入库；二跑全 skipped（hash 命中零重算）；改一张卡只 updated 该卡；新增卡 added；写卡路径 metadata 带 content\_hash
-- [ ] **Step 2（绿）**：`knowledge/indexer.py` + vector.add 带 hash + 三入口接线 + bridge 端点
-- [ ] **Step 3**：全量验证
-- [ ] **Step 4**：review + CHANGELOG + commit
+- [x] **Step 1（红）**：`tests/test_indexer.py`——首次 sync 全量入库；二跑全 skipped（hash 命中零重算）；改一张卡只 updated 该卡；新增卡 added；写卡路径 metadata 带 content\_hash
+- [x] **Step 2（绿）**：`knowledge/indexer.py` + vector.add 带 hash + 三入口接线 + bridge 端点
+- [x] **Step 3**：全量验证
+- [x] **Step 4**：review + CHANGELOG + commit
+
+> **M2-B2 执行记录（2026-09-03）：** 153 test 全过（+8），coverage 94.16%（indexer.py 100%），ruff / mypy 干净（30 源文件）。实现简化一处：hash 由 `VectorStore.add` 内部计算落 metadata（三写卡入口零改动即满足"写入即带 hash"，单点计算免三处重复）；两个关键设计约定——doc_id 与写卡路径同款 `note-{stem}`（互认不产重复条目，action 写卡后 sync 直接 skipped 有集成测试）、hash 只算正文（写卡索引真实标题、sync 从文件名剥日期前缀推标题，含标题会无限"更新"）。零重算证明走 monkeypatch 计数 upsert：二跑零次、改一张恰一次。已知限制按最小版登记：不处理删除/改名、同名 stem 跨目录遮蔽（见 CHANGELOG 0.15.0）。
 
 ### M2 · 成功准则核对
 
@@ -1578,11 +1580,11 @@ M2 完成标志：
 
 - [x] 低置信(<0.75)不自动链，标记待人工
 
-- [ ] hash 增量索引：改一张卡只重算该卡，不全文重扫
+- [x] hash 增量索引：改一张卡只重算该卡，不全文重扫
 
 - [x] Obsidian 已有人工双链被尊重（显式边），AI 相似边为其补充（隐式边），合成一张网
 
-- [ ] 写卡/改卡重复操作不重复计算 embedding（hash 命中即复用）
+- [x] 写卡/改卡重复操作不重复计算 embedding（hash 命中即复用）
 
 ***
 

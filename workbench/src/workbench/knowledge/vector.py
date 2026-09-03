@@ -55,6 +55,12 @@ def _default_embedding():
     return _LocalEmbeddingFunction()
 
 
+def content_hash(content: str) -> str:
+    """正文指纹（sha256）：增量索引的判据。只算正文——标题变更走文件名/doc_id 变更
+    路径；写卡路径（真实标题）与 sync（文件名推标题）对同一张卡算出同一 hash。"""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 class VectorStore:
     def __init__(self, persist_dir: str):
         self.client = PersistentClient(path=persist_dir)
@@ -66,8 +72,19 @@ class VectorStore:
     def add(self, doc_id: str, title: str, content: str, path: str = ""):
         text = f"{title}\n{content}"
         self.collection.upsert(
-            ids=[doc_id], documents=[text], metadatas=[{"title": title, "path": path}]
+            ids=[doc_id],
+            documents=[text],
+            metadatas=[{"title": title, "path": path, "content_hash": content_hash(content)}],
         )
+
+    def get_hash(self, doc_id: str) -> str | None:
+        """取已索引卡片的 content_hash；未索引返回 None（旧数据无 hash 字段同 None，视为待补）。"""
+        res = self.collection.get(ids=[doc_id], include=["metadatas"])
+        metas = res.get("metadatas") or []
+        if not metas:
+            return None
+        h = (metas[0] or {}).get("content_hash")
+        return h if isinstance(h, str) else None
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         res = self.collection.query(query_texts=[query], n_results=top_k)
