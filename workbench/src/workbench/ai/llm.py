@@ -18,7 +18,8 @@ class LLMClient:
         self.model = model
         usage.set_prices(price_in_per_m, price_out_per_m)
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, skill: str = "") -> str:
+        """skill 归因显式传入（M4-B1 决策 10）：调用方声明发起技能，落 usage 明细行。"""
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -34,6 +35,7 @@ class LLMClient:
                 user,
                 getattr(u, "prompt_tokens", 0) or 0,
                 getattr(u, "completion_tokens", 0) or 0,
+                skill=skill,
             )
         content = resp.choices[0].message.content or ""
         return content

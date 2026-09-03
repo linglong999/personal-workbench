@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.18.0] - 2026-09-03
+
+### Changed（M4-B1 · usage SQLite 化——重启不丢 + 日快照 + skill/source 归因）
+
+- `usage.py` 存储从内存 list/dict 重写为 SQLite（默认 `.data/usage.db`，per-call connect + WAL，对齐 auth 仓储先例）：`usage_records` 明细表（ts/kind/source/skill/model/tokens/cost/latency\_ms/llm\_delta/status）永存（MAX\_EVENTS=200 退役）+ `daily_usage_snapshots` 日快照表（date × kind × source × skill，写时 upsert 与明细**同一事务**）
+- 归因显式贯穿（决策 10，不用 contextvars——线程池不传播）：`LLMClient.complete(system, user, skill="")` → engine 四方法传 skill（classify/decision/action/link）落 llm 行；middleware 端点名落 tool 行 source 列
+- `/api/usage` 数据源切换，**响应形状逐字段锁定不变（前端零改动）**：totals 口径从"本进程"升级为"全部历史"（快照全表聚合）；events 改 `ORDER BY id DESC LIMIT 50`，ts ISO8601 存储、查询转回展示格式
+- 新增 `daily_trend(days)`（B2 `/api/stats` 数据源）：快照表直查（不重算全表）+ 快照缺失日明细聚合兜底 + 缺失日补零；日界全 Python 侧计算，SQL 禁用 `date('now')`
+- **防双算口径**：tool 行快照 upsert 只 +1 请求数，tokens/cost 加 0——llm 行是 token/cost 唯一事实源（测试锁定）
+- 新增 `tests/conftest.py`：autouse 把 usage db 指向各自 tmp\_path，测试不再写 `.data` 真文件
+
+### 实测
+
+- 196 test 全过（+10：重写 test\_usage.py 15 个 + engine skill 透传 1，退役内存上限测试 1），coverage 94.25%（usage.py 97%），ruff / mypy 干净（31 源文件）；bridge.py 零改动（middleware/report 调用点原样，source 归因天然落库）
+
 ## [0.17.0] - 2026-09-03
 
 ### Added（M3-B2 · 决策备忘两栏 enum frontmatter）

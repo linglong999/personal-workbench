@@ -6,7 +6,7 @@ from workbench.ai.frontmatter import parse
 
 
 class FakeLLM:
-    def complete(self, system, user):
+    def complete(self, system, user, skill=""):
         return "分类打标: 决策与策略"
 
 
@@ -16,7 +16,7 @@ class StubLLM:
     def __init__(self, response):
         self.response = response
 
-    def complete(self, system, user):
+    def complete(self, system, user, skill=""):
         return self.response
 
 
@@ -142,7 +142,7 @@ class PromptCaptureLLM:
         self.user = ""
         self.system = ""
 
-    def complete(self, system, user):
+    def complete(self, system, user, skill=""):
         self.user = user
         self.system = system
         return self.response
@@ -198,6 +198,30 @@ def test_analyze_decision_prompt_anti_outcome_bias():
     assert "决策过程" in llm.system  # 过程质量与结果好坏分开评估
     assert "运气" in llm.system  # 结果好可能只是运气
     assert "未知" in llm.system  # 结果未知的参照不强行判断好坏
+
+
+# ═══════════ M4-B1 · skill 归因显式贯穿（决策 10：不用 contextvars）═══════════
+
+
+class SkillCaptureLLM:
+    def __init__(self, response):
+        self.response = response
+        self.skills = []
+
+    def complete(self, system, user, skill=""):
+        self.skills.append(skill)
+        return self.response
+
+
+def test_engine_passes_skill_attribution_to_llm():
+    """engine 各方法显式传 skill 名 → LLMClient → record_llm 落表（用量归因）。"""
+    llm = SkillCaptureLLM(DRAFT_JSON)
+    engine = AIEngine(llm)
+    engine.classify("要询价")
+    engine.analyze_decision("选A还是B")
+    engine.draft_note("待办", "要询价")
+    engine.judge_link("标题", "内容", {"title": "t", "content": "c", "score": 0.9})
+    assert llm.skills == ["classify", "decision", "action", "link"]  # 与 Skill 名对齐
 
 
 def test_analyze_decision_history_view_default_on_shape_miss():

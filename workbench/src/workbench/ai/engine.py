@@ -18,7 +18,7 @@ class AIEngine:
         system = (
             "你是分类助手。根据内容判断类型，只输出 '输入'、'决策'、'实践'、'复盘'、'创造' 之一。"
         )
-        return self.llm.complete(system, text)
+        return self.llm.complete(system, text, skill="classify")
 
     def analyze_decision(self, text: str, history: list[dict] | None = None) -> dict:
         """决策层：结构化追问 + 多维分析 + 历史参照对照（M3-B1）。
@@ -52,7 +52,7 @@ class AIEngine:
                 f"   摘要：{str(h.get('content', ''))[:200]}"
                 for i, h in enumerate(history, 1)
             )
-        raw = self.llm.complete(system, user)
+        raw = self.llm.complete(system, user, skill="decision")
         defaults: dict = {
             "question": raw if raw else "",
             "dimensions": [],
@@ -85,7 +85,7 @@ class AIEngine:
             "kind=待办 时，正文含「下一步」与「次日跟进」两节，"
             "「次日跟进」写具体时间或触发条件。正文用中文，不编造用户没给的事实。"
         )
-        raw = self.llm.complete(system, f"kind={kind}\n{text}")
+        raw = self.llm.complete(system, f"kind={kind}\n{text}", skill="action")
         defaults = {"title": text[:20], "content": text}
         data = self._parse_json(raw)
         draft = defaults if data is None else {**defaults, **data}
@@ -136,7 +136,9 @@ class AIEngine:
             f"相似度：{candidate.get('score', 0.0)}"
         )
         raw = self.llm.complete(
-            system, f"新笔记标题：{title}\n新笔记摘要：\n{content[:200]}\n\n候选笔记：\n{cand}"
+            system,
+            f"新笔记标题：{title}\n新笔记摘要：\n{content[:200]}\n\n候选笔记：\n{cand}",
+            skill="link",
         )
         defaults: dict = {"link_to": False, "confidence": 0.0}
         data = self._parse_json(raw)

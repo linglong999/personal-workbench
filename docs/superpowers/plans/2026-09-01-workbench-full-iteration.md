@@ -1756,6 +1756,65 @@ M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
 
 > **业界核实（经 Explore 检索 dastanboard / llm-usage-exporter / LLM Observatory / Langfuse / OpenLLMetry / Team-AVON / github\_dashboard 等）：** 内部统计=后端聚合端点 + 前端 fetch 是主流（dashboard 不直接读 Vault/Chroma/billing）。用量追踪轻量做"每次调用埋点记 usage 表"而非上 Langfuse/LangSmith 全家桶；聚合用"近 7 天实时 + 更久日快照缓存"；MOCK 降级用 `/health` 判断 + 前端内置 fallback + toast。"运行型指标"是观测层能拿到的更强数据，本地小数据优先走轻量自建。
 
+### M4 · Step 0 写码边界清单（方案 C 定点研究落地，2026-09-03）
+
+**研究来源（定点 Explore 两路）：** ①SQLite 用量持久化——LiteLLM `DailyUserSpend` 日聚合表先例（v1.65.0 为百万日志后减查询负载而引入）、Langfuse observation 模型（归因字段直接落明细每行，不事后推断）、SQLite WAL 语义、Python contextvars 在 ThreadPoolExecutor **不自动传播**（FastAPI 同步 handler 跑线程池 → 隐式归因会丢）；②极简 dashboard——uPlot ~50KB min 零传递依赖（canvas、时间序列专用）vs recharts ~500KB 级多依赖 vs 手写 SVG/CSS（分类 ≤10、趋势点 ≤30 在手写上限内）；聚合端点惯例、趋势补零语义、降级三层 state。
+
+**用户拍板（M4 决策 6/7）：**
+
+- **决策 6（图表方案）**：引入 **uPlot**（~50KB min、零传递依赖、canvas 时间序列专用）——分类分布柱状 + 趋势折线均走 uPlot；不引 recharts/chart.js（体积与依赖树和极简哲学冲突）；KPI 数字卡（卡片总数/累计成本等）不画图。
+
+- **决策 7（端点形态）**：**单一聚合端点** `GET /api/stats?include=knowledge,usage&range=7d|30d` 替代原 6 细分端点草稿（个人 dashboard 请求数最小化）；`/api/usage` 明细端点保留且响应形状不变；stats 端点走 `require_auth`（业务端点统一鉴权）。
+
+**研究新决策（写码必须遵守）：**
+
+- **决策 8（快照时机）**：写时 upsert——每次 record 与当日快照 upsert **同一事务**（原子，快照天然新鲜）；**趋势查询一律走快照表**（30 天趋势 = 30 行直查，永不重算全表——取代原"近 7 天实时查明细 + 更久查快照"双口径：写时 upsert 下快照即当日终值，双口径是无谓复杂度）；快照缺失日**读时从明细聚合补齐**（兜底迁移/异常场景）；不引 cron/APScheduler/后台线程。
+
+- **决策 9（时间与金额）**：`ts` 本地 ISO8601 文本（`YYYY-MM-DDTHH:MM:SS`）、快照 `date` 本地日期串；**日界全部 Python 侧计算**（`datetime.now()` 本地时间），SQL 内禁用 `date('now')`/`datetime('now')`（SQLite 默认 UTC，日界会漂移）；`cost` REAL 元直存；`status` 两档 success/error（沿用 record_tool 的 ok 语义）。
+
+- **决策 10（归因）**：**显式参数贯穿，不用 contextvars**（FastAPI 同步 handler 跑线程池，contextvars 不自动传播，隐式归因会串档/丢失）——engine 各方法显式把 skill 名传给 `complete(..., skill=...)` → `record_llm(skill=...)`；`source` 由 bridge middleware 按端点名记（orchestrate/classify_text/…）。
+
+- **决策 11（连接）**：per-call `sqlite3.connect` + `closing()`（对齐 auth/repository.py 库内先例，天然线程安全）+ `PRAGMA journal_mode=WAL`（UI 边查边写降锁竞争）；不建连接池、不引 SQLAlchemy。
+
+- **决策 12（明细永存）**：`MAX_EVENTS=200` 退役；明细不删（个人规模一年千行级）；`/api/usage` 事件列表改查 SQLite `ORDER BY id DESC LIMIT 50`，**响应形状不变（前端零改动）**；totals 改为快照全表聚合（口径从"本进程"升级为"全部历史"，形状不变）；不做内存→SQLite 历史搬迁（内存数据本就易失，无搬迁价值）。
+
+- **决策 13（响应形状）**：分布 `[{name, count}]` 按 count 降序；趋势 `[{date, value}]` **缺失日补零**（折线渲染稳定 + 断档可见，优于跳过）；`range` 只认 `7d|30d`（非法值 422，FastAPI Query 校验）。
+
+- **决策 14（知识趋势数据源）**：文件名日期前缀（vault 写卡惯例 `{YYYY-MM-DD}-{title}.md`，indexer 同款解析口径），不读 mtime、不遍历解析 frontmatter；无日期前缀的存量文件不计趋势（宽容，不改写存量）。
+
+- **决策 15（前端降级与刷新）**：三层 state（null/data/mock）+ 既有 toast 机制（bridgeDown 同款位置与文案风格）；刷新走容器既有 ↻ tick 手动刷新，**不加自动轮询**；uPlot 实例组件卸载时 `destroy()`（防泄漏），配色从 CSS 变量取（适配双主题）。
+
+**分批定义（TDD 节奏同 M3，红→绿→验证→review）：**
+
+- **M4-B1 · usage SQLite 化（纯后端数据层）**：`usage_records`/`daily_usage_snapshots` 建表 + record_llm/record_tool 写 SQLite（同事务 upsert 快照）+ source/skill 归因贯穿（engine 显式传 skill、middleware 记 source）+ `/api/usage` 换源（形状不变）+ 趋势聚合查询（快照优先 + 明细兜底补齐）。验收：tmp db 重开不丢、totals 全史口径、重启后事件时间线仍在。
+
+- **M4-B2 · 知识存量统计 + `/api/stats` 聚合端点**：vault 卡片总数/分类分布/决策备忘数/双链数/新增趋势（文件名前缀口径）+ chroma collection 计数 + include/range 参数路由 + 补零与降序。验收：401 无 token、include 过滤、7d/30d 边界、无前缀文件不计趋势。
+
+- **M4-B3 · 前端 widget 接入**：`npm i uplot`；registry 两个 Placeholder 换真组件（knowledge-stock / usage-trend）+ KPI 数字卡 + MOCK 降级 + toast。验收：LIVE 真数据、MOCK 降级提示、双主题不破、卸载 destroy。
+
+**Step 0 检查表（各批写码前对照）：**
+
+1. B1 只动数据层与 `/api/usage` 数据源，**响应形状零变化**（决策 12）
+2. 不搬内存历史；`reset()` 保留（测试清场用，改清 SQLite 表）
+3. `record_llm/record_tool` 签名**兼容扩展**（新参带默认值），LLMClient/engine 现有调用点与测试不破坏；CaseEngine 不落库（eval 回放非真实调用，usage 层不感知）
+4. record + 快照 upsert 同一 SQLite 事务（conn 上下文一次 commit，决策 8）
+5. 日期/日界全部 Python 侧计算；SQL 不出现 `date('now')`/`datetime('now')`（决策 9）
+6. `/api/stats`：`require_auth`；`include` 缺省 `knowledge,usage`；`range` 非法 422；响应回显 `range`
+7. 趋势补零：起止日内每一天（含今日）都有数据点（决策 13）
+8. B3 不动 WidgetGrid/registry 容器契约（entry `{id,title,size,component,props}` + component 收 `{tick,cfg}`），只换 component 与 props
+9. uPlot：卸载 `destroy()`；配色走 CSS 变量（双主题）；空数据/单点不炸（NaN 兜底）
+10. MOCK 模式 widget 用内置 mockData + toast 标识，与既有视图降级（bridgeDown）一致
+
+### M4-B1 · usage SQLite 化（纯后端数据层）（逐任务 TDD）
+
+- [x] **Step 0（check）**：对照检查表 1–5（形状零变化/不搬内存历史/签名兼容扩展/同事务快照/日界 Python 侧）——现有 test_usage.py 锁定契约后重写；`MAX_EVENTS` 上限测试随决策 12 退役
+- [x] **Step 1（红）**：重写 `tests/test_usage.py`（形状逐字段锁定 ×2 + 重开不丢 + 明细永存 250 条 + skill/source 归因落表 + 快照同事务累加 + tool 行不双算 tokens + 趋势直查快照/明细兜底/补零 ×4）+ `tests/test_ai.py`（engine 4 方法 skill 透传）+ 新增 `tests/conftest.py`（autouse：usage db 指向 tmp，隔离 .data 真文件）——39 error 全指向 `usage.set_db` 缺失，红得正确
+- [x] **Step 2（绿）**：`usage.py` 重写（`usage_records` + `daily_usage_snapshots` 建表；record_llm/record_tool 写明细 + 同事务快照 upsert；`report()` totals 改快照全表聚合、events 改 `ORDER BY id DESC LIMIT 50`、ts ISO 存储转展示格式；`daily_trend(days)` 快照直查 + 明细兜底 + 补零；per-call connect + WAL）+ `llm.py`（complete 加 `skill=""` → record_llm）+ `engine.py`（classify/decision/action/link 4 处显式传 skill）+ 3 个测试替身签名加 skill
+- [x] **Step 3**：全量验证——**196 test 全过（+10），coverage 94.25%（usage.py 97%），ruff / mypy 干净**；修一处兜底测试断言（删快照后 totals 快照口径自然为 0，对照改明细同式）
+- [x] **Step 4**：review + CHANGELOG + 提交
+
+> **B1 执行记录（2026-09-03，196 test / coverage 94.25% / ruff、mypy 干净）：** 归因分层——skill 记 llm 行（engine 显式传，contextvars 弃用：线程池不传播）、source 记 tool 行（middleware 端点名，现有参数直落 source 列，签名零变化）；**tool 行快照 upsert 只 +1 请求数、tokens/cost 加 0**——llm 行是 tokens/cost 唯一事实源，防全表聚合双算（有测试锁定）；`/api/usage` 响应形状逐字段锁定（llm 行含 system 无 ms/llm/ok、tool 行反之），前端零改动；totals 口径升级为全史（快照全表聚合）；`daily_trend` 供 B2 `/api/stats` 直调。bridge.py **零改动**（middleware 与 report 调用点原样），middleware 记录的 source 天然落库。
+
 ### M4-A · 知识存量统计（读 Vault + Chroma）
 
 - 卡片总数、分类分布（`ALLOWED_FOLDERS` 各目录计数）
@@ -1788,15 +1847,13 @@ date, source, skill, total_requests, input_tokens, output_tokens, cost
 
 ### M4-C · bridge 聚合端点 + 前端展示 + MOCK 降级
 
-- Backend 聚合端点（单一数据源，bridge 层）：
+- Backend 聚合端点（单一数据源，bridge 层；决策 7 收敛为单一端点，取代原 6 端点草稿）：
 
   - `/api/health`（供前端判断模式）
 
-  - `/api/vault/stats`、`/api/vault/category-distribution`、`/api/vault/trends`
+  - `GET /api/stats?include=knowledge,usage&range=7d|30d`（分布/趋势/双链/chroma 计数/用量一次返回）
 
-  - `/api/chroma/stats`
-
-  - `/api/llm/usage?range=30d`、`/api/llm/cost?range=30d`（读 usage DB）
+  - `/api/usage` 明细端点保留（用量页时间线，B1 已换 SQLite 源、形状不变）
 
 - React 只 fetch + chart（依赖 M0-B5 Widget 容器 + 双主题 + 布局保存）
 
@@ -1816,7 +1873,7 @@ M4 完成标志：
 
 - [ ] 用量记录含 source/skill 分组字段
 
-- [ ] bridge 聚合端点齐全（/health /vault/\* /chroma/\* /llm/usage /llm/cost）
+- [ ] bridge 聚合端点就绪（/health + `/api/stats` 单一聚合 + `/api/usage` 明细，决策 7）
 
 - [ ] React dashboard 只 fetch 展示，展示知识量 + 用量趋势
 
