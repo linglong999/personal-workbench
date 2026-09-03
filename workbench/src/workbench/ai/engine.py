@@ -5,6 +5,9 @@ LLM 是外部系统边界：结构化输出走 JSON，解析失败一律回退�
 """
 
 import json
+from datetime import date
+
+from workbench.ai import frontmatter
 
 
 class AIEngine:
@@ -66,19 +69,45 @@ class AIEngine:
         """实践层：把结论/待办起草为可落库笔记。返回 title/content。
 
         契约（闭环依赖）：决策备忘正文必含「关联问题」节；待办正文必含「下一步」与「次日跟进」。
+        M3-B2：决策备忘另合成两栏 enum frontmatter 拼在正文前（待办不加）——
+        type/date 与 actual_outcome/result_quality 由代码生成（新决策结果未发生，
+        两栏强制 unknown 宁缺毋猜，LLM 不参与）；LLM 只从输入提炼自然语言栏
+        （decision/context/criteria/expected_outcome/applicability），不编造。
         """
         system = (
             "你是行动转化助手，服务于个人知识工作流的实践层。把用户的结论或待办转化为可直接落库的笔记，"
-            '只输出 JSON：{"title": "标题（20 字内）", "content": "markdown 正文"}。'
+            '只输出 JSON：{"title": "标题（20 字内）", "content": "markdown 正文"'
+            ', "meta": {"decision": "本次定的结论一句话", "context": "当时背景一两句", '
+            '"criteria": "用到的判据，逗号分隔", "expected_outcome": "当时的预期结果", '
+            '"applicability": "适用条件"}}。'
             "规则：kind=决策备忘 时，正文依次含「背景」「决定」「关联问题」三节，"
-            "「关联问题」写该决策待验证的 1-3 个问题；"
+            "「关联问题」写该决策待验证的 1-3 个问题，meta 各栏从输入提炼、不编造，信息不足的栏留空；"
             "kind=待办 时，正文含「下一步」与「次日跟进」两节，"
             "「次日跟进」写具体时间或触发条件。正文用中文，不编造用户没给的事实。"
         )
         raw = self.llm.complete(system, f"kind={kind}\n{text}")
         defaults = {"title": text[:20], "content": text}
         data = self._parse_json(raw)
-        return defaults if data is None else {**defaults, **data}
+        draft = defaults if data is None else {**defaults, **data}
+        if kind != "决策备忘":
+            return {"title": draft["title"], "content": draft["content"]}
+        raw_meta = data.get("meta") if data else None
+        llm_meta = raw_meta if isinstance(raw_meta, dict) else {}
+        meta = {
+            "type": "决策",
+            "date": date.today().isoformat(),
+            "decision": str(llm_meta.get("decision", "")),
+            "context": str(llm_meta.get("context", "")),
+            "criteria": str(llm_meta.get("criteria", "")),
+            "expected_outcome": str(llm_meta.get("expected_outcome", "")),
+            "applicability": str(llm_meta.get("applicability", "")),
+            "actual_outcome": "unknown",
+            "result_quality": "unknown",
+        }
+        return {
+            "title": draft["title"],
+            "content": frontmatter.encode(meta) + "\n" + draft["content"],
+        }
 
     def check_closed_loop(self, decisions: list[str]) -> list[str]:
         """检查决策闭环率：返回缺少关联的决策问题清单。实际实现可调用 LLM 语义判断，此处按规则返回。"""

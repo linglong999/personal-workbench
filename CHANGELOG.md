@@ -2,6 +2,24 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式。
 
+## [0.17.0] - 2026-09-03
+
+### Added（M3-B2 · 决策备忘两栏 enum frontmatter）
+
+- 新增 `ai/frontmatter.py`（零 YAML 依赖）：`encode`（dict → `---` 文本块，含中文/冒号/逗号的值走 json.dumps 引号即合法 YAML 标量，enum/ISO 日期裸值）+ `parse`（宽容读回：只认顶部一组 `---`、正文里的 `---` 原样保留、无闭合**丢 meta 不丢正文**、块内烂行跳过）+ `enum_or_unknown`（非法/缺失一律 unknown，大小写敏感、不按词面硬映射）
+- `engine.draft_note` 决策备忘分支：合成 M3-A 结构 frontmatter 拼在正文前（待办不加）——`type`/`date`/`actual_outcome`/`result_quality` 由**代码生成**（新决策结果未发生，两栏强制 unknown 是事实非猜测，LLM 不参与，污染防御有测试）；LLM 只从输入提炼自然语言栏（decision/context/criteria/expected\_outcome/applicability），信息不足留空不编造；LLM 残缺/抽风时骨架仍全、原文兜底进正文
+- 两栏 enum 口径（决策 8）：`actual_outcome` ∈ success/failure/inconclusive/unknown、`result_quality` ∈ good/medium/poor/unknown；lesson 留复盘后填
+
+### 已知边界（有意为之）
+
+- 强 schema 只强 AI 起草的新决策备忘——create\_note 端点 / MCP / 用户手写卡不加 frontmatter（存量宽容，check 7）
+- action.py / indexer.py 零改动：同源 M2-B1 已建（落盘=索引同一份 content），hash 只算 content 天然含 frontmatter——sync 命中不重算、改 frontmatter 一栏恰重算一次均有测试证明
+- CaseEngine（eval 回放）draft 不拼 frontmatter：脚本回放非真起草，golden 断言不涉及（M5+ 需要时扩展）
+
+### 实测
+
+- 186 test 全过（+19：test\_frontmatter.py 新建 12 + draft\_note 5 + indexer 同源/重算 2），coverage 94.25%（frontmatter.py 95%），ruff / mypy 干净（31 源文件）
+
 ## [0.16.0] - 2026-09-03
 
 ### Added（M3-B1 · 决策带历史参照）

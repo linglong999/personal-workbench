@@ -1,6 +1,8 @@
 import json
+import re
 
 from workbench.ai.engine import AIEngine
+from workbench.ai.frontmatter import parse
 
 
 class FakeLLM:
@@ -203,3 +205,89 @@ def test_analyze_decision_history_view_default_on_shape_miss():
     engine = AIEngine(StubLLM('{"confidence": 0.9}'))
     analysis = engine.analyze_decision("先做哪个", HISTORY)
     assert analysis["history_view"] == ""
+
+
+# ═══════════ M3-B2 · draft_note 决策备忘两栏 enum frontmatter ═══════════
+
+DRAFT_META_JSON = json.dumps(
+    {
+        "title": "选 A 方案",
+        "content": "## 背景\n…\n## 决定\n选 A\n## 关联问题\n1. 成本？",
+        "meta": {
+            "decision": "选 A：成本低",
+            "context": "两个供应商比价",
+            "criteria": "成本, 交付速度",
+            "expected_outcome": "两周内交付",
+            "applicability": "小团队采购",
+        },
+    },
+    ensure_ascii=False,
+)
+
+
+def test_draft_note_decision_memo_frontmatter_two_columns():
+    """决策备忘 content 以 frontmatter 开头：type/date + LLM 自然语言栏 + 两栏 enum。"""
+    engine = AIEngine(StubLLM(DRAFT_META_JSON))
+    draft = engine.draft_note("决策备忘", "选A还是B")
+    meta, body = parse(draft["content"])
+    assert meta["type"] == "决策"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", meta["date"])  # ISO 8601
+    assert meta["actual_outcome"] == "unknown"  # 两栏 enum（决策 8）
+    assert meta["result_quality"] == "unknown"
+    assert meta["decision"] == "选 A：成本低"  # LLM 自然语言栏透传
+    assert meta["criteria"] == "成本, 交付速度"
+    assert "关联问题" in body  # 正文三节保留，闭环契约不破坏
+
+
+def test_draft_note_todo_without_frontmatter():
+    """待办不加 frontmatter（强 schema 只强决策备忘）。"""
+    todo_json = json.dumps(
+        {"title": "询价", "content": "## 下一步\n询价\n## 次日跟进\n明早10点"}, ensure_ascii=False
+    )
+    engine = AIEngine(StubLLM(todo_json))
+    draft = engine.draft_note("待办", "要询价")
+    assert not draft["content"].startswith("---")
+    assert "actual_outcome" not in draft["content"]
+
+
+def test_draft_note_enum_columns_forced_unknown_despite_llm_pollution():
+    """check 4 宁缺毋猜：LLM 试图给出结果/质量（新决策不可能有）→ 代码强制 unknown。"""
+    polluted = json.dumps(
+        {
+            "title": "选 A 方案",
+            "content": "## 决定\n选 A",
+            "meta": {
+                "decision": "选 A",
+                "actual_outcome": "success",
+                "result_quality": "好",
+            },
+        },
+        ensure_ascii=False,
+    )
+    engine = AIEngine(StubLLM(polluted))
+    draft = engine.draft_note("决策备忘", "选A还是B")
+    meta, _ = parse(draft["content"])
+    assert meta["actual_outcome"] == "unknown"  # 两栏由代码硬编码，LLM 不参与
+    assert meta["result_quality"] == "unknown"
+
+
+def test_draft_note_meta_missing_still_minimal_frontmatter():
+    """LLM 残缺（无 meta 键）：骨架仍全（type/date/两栏 unknown），自然语言栏缺省不出现。"""
+    engine = AIEngine(StubLLM(DRAFT_JSON))
+    draft = engine.draft_note("决策备忘", "选A还是B")
+    meta, body = parse(draft["content"])
+    assert meta["type"] == "决策"
+    assert meta["actual_outcome"] == "unknown"
+    assert meta["result_quality"] == "unknown"
+    assert "decision" not in meta  # 缺省栏不出现（宁缺毋猜）
+    assert "关联问题" in body
+
+
+def test_draft_note_bad_json_decision_memo_keeps_skeleton():
+    """LLM 抽风（非法 JSON）：决策备忘仍带骨架 frontmatter，原文兜底进正文不丢。"""
+    engine = AIEngine(StubLLM("模型抽风了"))
+    draft = engine.draft_note("决策备忘", "选A还是B")
+    meta, body = parse(draft["content"])
+    assert meta["actual_outcome"] == "unknown"
+    assert meta["result_quality"] == "unknown"
+    assert body == "选A还是B"  # 原文兜底，丢 meta 不丢正文

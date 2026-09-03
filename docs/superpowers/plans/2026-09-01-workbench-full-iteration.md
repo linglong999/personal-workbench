@@ -1693,21 +1693,21 @@ classify(贴的是决策类输入)
 
 M3 完成标志：
 
-- [ ] 新写决策备忘带 M3-A frontmatter 结构（含 outcome 与 result\_quality）
+- [x] 新写决策备忘带 M3-A frontmatter 结构（含 outcome 与 result\_quality）（B2）
 
-- [ ] decision 只消费 recall 参照、不自己检索（R1 单向依赖）
+- [x] decision 只消费 recall 参照、不自己检索（R1 单向依赖）（B1）
 
-- [ ] decision 输出含"可选方案 + 历史参照成败对照 + 倾向"
+- [x] decision 输出含"可选方案 + 历史参照成败对照 + 倾向"（B1）
 
-- [ ] 参照注入为结构化经验卡摘要、非全文
+- [x] 参照注入为结构化经验卡摘要、非全文（B1）
 
-- [ ] **反结果偏误**：不按 outcome 过滤成功案例；prompt 区分决策逻辑 vs 结果好坏
+- [x] **反结果偏误**：不按 outcome 过滤成功案例；prompt 区分决策逻辑 vs 结果好坏（B1）
 
-- [ ] 存量决策备忘宽容处理（启发式推断 outcome，不强制改写）
+- [x] 存量决策备忘宽容处理（启发式推断 outcome，不强制改写）（B1 不硬过滤不强判 + B2 parse 宽容读回缺省 unknown，原文不改写）
 
-- [ ] 主管能编 classify→recall→decision→action 决策链路
+- [x] 主管能编 classify→recall→decision→action 决策链路（B1）
 
-- [ ] recall 全量向量召回历史参照，结构化摘要进 decision；历史结果仅作展示维度、不作排序键（决策 7，反结果偏误）
+- [x] recall 全量向量召回历史参照，结构化摘要进 decision；历史结果仅作展示维度、不作排序键（决策 7，反结果偏误）（B1）
 
 ### M3 执行分批（2026-09-03 补写）
 
@@ -1728,13 +1728,15 @@ M3 体量≈M2，分 2 批执行，每批走 check 表 + 逐任务 TDD：
 
 > **B1 执行记录（2026-09-03，167 test / coverage 94.19% / ruff、mypy 干净）：** 决策流前置 recall(history) 注入结构化历史参照（标题+200 字截断+score 非全文）+ 反结果偏误 system 措辞 + 输出契约扩 history_view；recall 三档用途统一 args.purpose 键。**review 逐条通过、零返工**：① 注入边界——601 字全文不进 prompt 有断言，无 history 时 prompt 为原文不产生空参照块；② 三档串档——purpose 键隔离 + 旧步缺省 candidates（运行态无跨进程持久化，无兼容风险）；③ 反偏误措辞——过程/结果分开、运气、未知不强行判断三要素均有 PromptCapture 断言固化；④ 回流 script.related last-wins 为 M2 起既有语义非本批回归（回放时 decision 分析由 script 固化、link 未命中 title 安全默认不链），登记 M5+ 评测水位提升时改进。额外确认 loop 安全：decision 一次性触发、judgement reject → finish 不回环、max_steps 兜底仍在。
 
-### M3-B2 · 决策备忘 frontmatter（逐任务 TDD）
+### M3-B2 · 决策备忘 frontmatter（两栏）（逐任务 TDD）
 
-- [ ] **Step 0（check）**：核对 Step 0 清单 1/2/3/4/7（frontmatter 解析边界 + enum + 落盘索引同源 + 宁缺毋猜 + 存量宽容）
-- [ ] **Step 1（红）**：`tests/test_ai.py`（draft_note 决策备忘含两栏 frontmatter、待办**不加**、enum 缺失→unknown）+ `tests/test_indexer.py`（写卡路径落盘/索引同源含 frontmatter、sync 复用不重算）+ 新增 `tests/test_frontmatter.py`（解析：正文含 `---` 不截断、解析失败丢 meta 不丢正文、存量缺字段缺省）
-- [ ] **Step 2（绿）**：`engine.py`（draft_note frontmatter）+ 新增 `ai/frontmatter.py`（编/解码两栏，含正文 `---` 边界 + 宽容读回）+ `action.py`（落盘同源 frontmatter）+ `indexer.py`（同源适配）
-- [ ] **Step 3**：全量验证
-- [ ] **Step 4**：review + CHANGELOG + 提交
+- [x] **Step 0（check）**：核对 Step 0 清单 1/2/3/4/7（frontmatter 解析边界 + enum + 落盘索引同源 + 宁缺毋猜 + 存量宽容）
+- [x] **Step 1（红）**：新增 `tests/test_frontmatter.py`（encode/parse roundtrip、特殊值引号、正文 `---` 不截断、无闭合丢 meta 保正文、存量无 frontmatter、烂行宽容跳过、缺字段缺省 unknown、enum_or_unknown 严格）+ `tests/test_ai.py`（draft_note 决策备忘两栏 frontmatter、待办不加、LLM 污染 enum 被强制 unknown、meta 残缺骨架仍全、bad JSON 保骨架原文不丢）+ `tests/test_indexer.py`（DraftEngine 升级含 frontmatter + 落盘/索引同源直接断言 + 改 frontmatter 一栏触发重算）——3 文件 collection error 全指向 frontmatter 模块缺失，红得正确
+- [x] **Step 2（绿）**：新增 `ai/frontmatter.py`（encode/parse/enum_or_unknown，零 YAML 依赖：键值行 + json.dumps 引号）+ `engine.py`（draft_note 决策备忘分支合成 frontmatter：type/date/两栏 enum 代码生成 + LLM 只提炼自然语言栏；待办不加）。**action.py / indexer.py 零改动**——同源 M2-B1 已建（单一 content 变量），hash 只算 content 天然含 frontmatter，测试证明
+- [x] **Step 3**：全量验证 ruff / mypy / pytest --cov——186 test 全过（+19），coverage 94.25%，ruff / mypy 干净（31 源文件）；修一处 mypy 类型窄化（三元表达式 `.get()` 的 isinstance 窄化不持久，拆两步）
+- [x] **Step 4**：review + CHANGELOG + 提交
+
+> **B2 执行记录（2026-09-03，186 test / coverage 94.25% / ruff、mypy 干净）：** 决策备忘新卡带两栏 enum frontmatter（M3-A 结构，lesson 留复盘后填）；两栏与 type/date 由代码生成（新决策结果未发生 → unknown 是事实非猜测，LLM 不参与，污染测试证明）；LLM 只从输入提炼自然语言栏。**review 确认**：① 解析边界——顶部一组 `---`、正文 `---` 原样保留、无闭合丢 meta 保正文、烂行跳过；② 同源——落盘==索引直接断言 + sync hash 命中 + 改 frontmatter 一栏恰重算一次；③ 存量宽容——parse 只读不改写，create_note/MCP/手写卡路径不加 frontmatter（强 schema 只强 AI 起草的新卡）；④ vault.\_frontmatter\_tags 与新格式无冲突（list\_tags 查知识卡片目录，决策备忘 frontmatter 无 tags 键返回空）。CaseEngine（eval 回放）draft 不拼 frontmatter——脚本回放非真起草，golden 断言不涉及，留待 M5+ 需要时扩展。
 
 ***
 
